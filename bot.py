@@ -14,7 +14,6 @@ LEVEL_TITLES = {
     20: "ракета 🚀",
 }
 
-# Хранилище уровней пользователей (в реальном проекте лучше использовать базу данных)
 user_levels = {}
 
 def get_title(level: int) -> str:
@@ -26,7 +25,7 @@ def get_title(level: int) -> str:
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message.reply_to_message:
-            await update.message.reply_text("❌ Ответь на сообщение пользователя и напиши /setlvl [уровень]")
+            await update.message.reply_text("❌ Ответь на сообщение пользователя")
             return
         
         if not context.args:
@@ -37,7 +36,7 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user = update.message.reply_to_message.from_user
         title = get_title(level)
         
-        # Сохраняем уровень пользователя
+        # Сохраняем уровень
         user_levels[target_user.id] = level
         
         # Удаляем команду
@@ -46,19 +45,41 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
         
+        # Пробуем сменить тег (если пользователь уже админ)
+        tag_changed = False
+        try:
+            await context.bot.set_chat_administrator_custom_title(
+                chat_id=GROUP_ID,
+                user_id=target_user.id,
+                custom_title=title
+            )
+            tag_changed = True
+        except:
+            pass
+        
         # Отправляем анонс
-        await context.bot.send_message(
-            chat_id=GROUP_ID,
-            text=f"🎉 *{target_user.first_name}* 🎉\n\n"
-                 f"Ого, уже уровень {level}!\n"
-                 f"Теперь ты *{title}*, а не чепырка! 🔥\n\n"
-                 f"💡 Теперь другие могут узнать твой уровень командой:\n"
-                 f"`/my_level`",
-            parse_mode="Markdown"
-        )
+        if tag_changed:
+            await context.bot.send_message(
+                chat_id=GROUP_ID,
+                text=f"🎉 *{target_user.first_name}* 🎉\n\n"
+                     f"Ого, уже уровень {level}!\n"
+                     f"Теперь ты *{title}*, а не чепырка! 🔥\n\n"
+                     f"✨ Тег под ником изменён! ✨",
+                parse_mode="Markdown"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=GROUP_ID,
+                text=f"🎉 *{target_user.first_name}* 🎉\n\n"
+                     f"Ого, уже уровень {level}!\n"
+                     f"Теперь ты *{title}*, а не чепырка! 🔥\n\n"
+                     f"⚠️ Чтобы бот менял тег под ником, **выдай пользователю права администратора** (минимальные: только «Добавление участников»)\n\n"
+                     f"💡 Проверить уровень можно командой `/my_level`",
+                parse_mode="Markdown"
+            )
         
     except ValueError:
-        await update.message.reply_text("❌ Уровень должен быть числом, бро")
+        await update.message.reply_text("❌ Уровень должен быть числом")
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
