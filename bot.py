@@ -2,7 +2,7 @@ import asyncio
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ========== ТВОИ НАСТРОЙКИ (УЖЕ ГОТОВО) ==========
+# ========== ТВОИ НАСТРОЙКИ ==========
 BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
 GROUP_ID = -5014543190
 
@@ -16,7 +16,7 @@ LEVEL_TITLES = {
     15: "самолёт ✈️",
     20: "ракета 🚀",
 }
-# =================================================
+# ========================================
 
 def get_title(level: int) -> str:
     for lvl in sorted(LEVEL_TITLES.keys(), reverse=True):
@@ -60,11 +60,12 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка: {e}")
 
-async def main():
+def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlvl", set_level))
+    
     print("🤖 Бот запущен! Используй /setlvl в ответ на сообщение пользователя")
-    await app.run_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
