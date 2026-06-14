@@ -1,12 +1,39 @@
 import asyncio
+import json
+import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ⚠️ Вставь сюда токен своего бота от @BotFather
 BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
+DATA_FILE = "levels.json"
 
-user_levels = {}
 username_to_id = {}
+
+# 💾 ЛОГИКА РАБОТЫ С ФАЙЛОМ СОХРАНЕНИЙ
+def load_levels():
+    """Загрузка уровней из файла при старте бота"""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # JSON превращает ID (числа) в строки, возвращаем их обратно в int
+                return {int(k): v for k, v in data.items()}
+        except Exception as e:
+            print(f"❌ Ошибка загрузки файла уровней: {e}")
+            return {}
+    return {}
+
+def save_levels():
+    """Сохранение текущих уровней в файл"""
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(user_levels, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"❌ Ошибка записи в файл уровней: {e}")
+
+# Загружаем базу данных прямо при запуске скрипта
+user_levels = load_levels()
 
 # 🏎️ СПИСОК ТАЧЕК ПО УРОВНЯМ
 CAR_RANKS = {
@@ -28,7 +55,6 @@ CAR_RANKS = {
     20: "Роллс-Ройс Фантом"
 }
 
-# Хэндлер для отслеживания юзернеймов + Реакция на упоминание @bot
 async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user and user.username:
@@ -54,7 +80,6 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# Универсальная функция проверки статуса (owner / producer / regular)
 async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     try:
         member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
@@ -90,11 +115,8 @@ async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.promote_chat_member(
             chat_id=chat_id, user_id=target_user.id,
-            can_manage_chat=True, 
-            can_delete_messages=True,
-            can_restrict_members=True,
-            can_invite_users=True,
-            can_pin_messages=True
+            can_manage_chat=True, can_delete_messages=True,
+            can_restrict_members=True, can_invite_users=True, can_pin_messages=True
         )
         await asyncio.sleep(1)
         
@@ -151,6 +173,7 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_user.id, custom_title="5 lvl"
         )
         user_levels[target_user.id] = 5
+        save_levels()  # Запись в файл
             
         await context.bot.send_message(
             chat_id=chat_id,
@@ -235,6 +258,8 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         title = f"{level} lvl"
         user_levels[target_user_id] = level
+        save_levels()  # Запись в файл
+        
         car_name = CAR_RANKS.get(level, "Неизвестное авто")
         
         await context.bot.promote_chat_member(
@@ -291,6 +316,7 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_user.id, custom_title="5 lvl"
         )
         user_levels[target_user.id] = 5
+        save_levels()  # Запись в файл
             
         await context.bot.send_message(
             chat_id=chat_id,
@@ -303,7 +329,6 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка при очистке: `{e}`", parse_mode="Markdown")
 
-# Команда смены ника для продюсера
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -334,7 +359,6 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка смены тега: `{e}`", parse_mode="Markdown")
 
-# Узнать свой уровень
 async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     level = user_levels.get(user_id, 1)
