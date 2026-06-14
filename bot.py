@@ -9,7 +9,6 @@ user_levels = {}
 
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Динамически получаем ID текущего чата, где написали команду
         chat_id = update.effective_chat.id
         
         if not update.message.reply_to_message:
@@ -21,6 +20,12 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         level = int(context.args[0])
+        
+        # === ПРОВЕРКА НА ДИАПАЗОН (ОТ 5 ДО 20) ===
+        if level < 5 or level > 20:
+            await update.message.reply_text("❌ Ошибка! Можно устанавливать только уровни от 5 до 20, бро.")
+            return
+            
         target_user = update.message.reply_to_message.from_user
         title = f"{level} лвл"
         
@@ -35,7 +40,6 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # === ВЫДАЧА ПРАВ И ТЕГА В ТЕКУЩЕМ ЧАТЕ ===
         try:
-            # 1. Выдаем права админа в этом конкретном чате
             await context.bot.promote_chat_member(
                 chat_id=chat_id,
                 user_id=target_user.id,
@@ -45,7 +49,6 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await asyncio.sleep(1)
             
-            # 2. Устанавливаем тег в этом конкретном чате
             await context.bot.set_chat_administrator_custom_title(
                 chat_id=chat_id,
                 user_id=target_user.id,
@@ -82,7 +85,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlvl", set_level))
     app.add_handler(CommandHandler("my_level", my_level))
-    print("🤖 Бот запущен! Работает в любых группах.")
+    print("🤖 Бот запущен! Включено ограничение на уровни от 5 до 20.")
     app.run_polling()
 
 if __name__ == "__main__":
