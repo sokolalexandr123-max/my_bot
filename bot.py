@@ -5,24 +5,8 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
 GROUP_ID = -1003705147912
 
-LEVEL_TITLES = {
-    1: "чепырка 🚗",
-    3: "копейка 💨",
-    5: "Логан 🔑",
-    8: "Киа Рио 🔥",
-    10: "вертолёт 🚁",
-    15: "самолёт ✈️",
-    20: "ракета 🚀",
-}
-
 # Временное хранилище уровней
 user_levels = {}
-
-def get_title(level: int) -> str:
-    for lvl in sorted(LEVEL_TITLES.keys(), reverse=True):
-        if level >= lvl:
-            return LEVEL_TITLES[lvl]
-    return LEVEL_TITLES.get(1, "новичок")
 
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -31,25 +15,27 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         if not context.args:
-            await update.message.reply_text("❌ Напиши уровень: /setlvl 8")
+            await update.message.reply_text("❌ Напиши уровень: /setlvl 5")
             return
         
         level = int(context.args[0])
         target_user = update.message.reply_to_message.from_user
-        title = get_title(level)
+        
+        # Теперь тег формируется динамически под любое число
+        title = f"{level} лвл"
         
         # Сохраняем уровень
         user_levels[target_user.id] = level
         
-        # Удаляем саму команду админа
+        # Удаляем саму команду админа для чистоты чата
         try:
             await update.message.delete()
         except:
             pass
         
-        # === МАГИЯ СМЕНЫ ТЕГА ===
+        # === ВЫДАЧА ПРАВ И ТЕГА ===
         try:
-            # 1. Выдаем минимальные права (чтобы телеграм разрешил повесить тег)
+            # 1. Выдаем минимальные права админа
             await context.bot.promote_chat_member(
                 chat_id=GROUP_ID,
                 user_id=target_user.id,
@@ -57,10 +43,10 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 can_invite_users=True
             )
             
-            # Ждем секунду, чтобы сервера телеграма обновили статус участника
+            # Небольшая пауза для серверов ТГ
             await asyncio.sleep(1)
             
-            # 2. Меняем описание (тег)
+            # 2. Устанавливаем тег (например: "5 лвл")
             await context.bot.set_chat_administrator_custom_title(
                 chat_id=GROUP_ID,
                 user_id=target_user.id,
@@ -68,14 +54,13 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             tag_status = "✅ Тег успешно установлен!"
         except Exception as e:
-            tag_status = f"⚠️ Уровень выдан, но тег не повесился (проверь, есть ли у бота право 'Добавлять админов'). Ошибка: {e}"
+            tag_status = f"⚠️ Уровень изменен, но тег не повесился. Ошибка: {e}"
 
-        # Отправляем красивый анонс
+        # Отправляем анонс в чат
         await context.bot.send_message(
             chat_id=GROUP_ID,
             text=f"🎉 *{target_user.first_name}* 🎉\n\n"
-                 f"Ого, уже уровень {level}!\n"
-                 f"Теперь ты *{title}*, а не чепырка! 🔥\n\n"
+                 f"Твой новый статус: *{title}*! 🔥\n\n"
                  f"_{tag_status}_",
             parse_mode="Markdown"
         )
@@ -88,11 +73,9 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     level = user_levels.get(user_id, 1)
-    title = get_title(level)
     
     await update.message.reply_text(
-        f"📊 Твой уровень: *{level}*\n"
-        f"🏆 Звание: *{title}*",
+        f"📊 Твой уровень: *{level} лвл*",
         parse_mode="Markdown"
     )
 
@@ -100,7 +83,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("setlvl", set_level))
     app.add_handler(CommandHandler("my_level", my_level))
-    print("🤖 Бот запущен! Функция авто-админки для тегов включена.")
+    print("🤖 Бот запущен! Теперь теги выдаются в формате 'Х лвл'.")
     app.run_polling()
 
 if __name__ == "__main__":
