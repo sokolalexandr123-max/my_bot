@@ -8,13 +8,32 @@ BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
 user_levels = {}
 username_to_id = {}
 
+# 🏎️ ТВОЙ СПИСОК ТАЧЕК ПО УРОВНЯМ
+CAR_RANKS = {
+    5: "Чепырка (ВАЗ-2114)",
+    6: "Приора",
+    7: "Рено Логан",
+    8: "Киа Рио / Хендай Солярис",
+    9: "Шкода Октавия",
+    10: "Тойота Камри 3.5",
+    11: "БМВ Е39",
+    12: "Мерседес C-Класс",
+    13: "БМВ Х5",
+    14: "Порше Кайен",
+    15: "Гелик (Mercedes G-Class)",
+    16: "Ауди R8",
+    17: "Майбах (Maybach)",
+    18: "Ламборгини / Феррари",
+    19: "Бугатти Широн",
+    20: "Роллс-Ройс Фантом"
+}
+
 # Хэндлер для отслеживания юзернеймов + Реакция на упоминание @bot
 async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user and user.username:
         username_to_id[user.username.lower()] = user.id
     
-    # === ФИШКА: Реакция на упоминание бота через @ ===
     if update.message and update.message.text:
         bot_user = await context.bot.get_me()
         bot_username = bot_user.username.lower()
@@ -23,18 +42,18 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             help_text = (
                 "📋 *СПРАВКА ПО КОМАНДАМ БОТА*\n\n"
                 "👑 *Только для Создателя чата:*\n"
-                "• `/addprod [Имя]` (ответом) — назначить Продюсера. Выдаются *ВСЕ* права админа ТГ! 🔥\n"
-                "• `/delprod` (ответом) — уволить Продюсера. Полностью снимает все права. 📉\n\n"
+                "• `/addprod [Имя]` (ответом) — назначить Продюсера с фулл-правами. 🔥\n"
+                "• `/delprod` (ответом) — уволить Продюсера. 📉\n\n"
                 "🎬 *Для Продюсеров и Создателя:*\n"
-                "• `/setlvl [5-20]` (ответом, по @username или ID) — выдать уровень простому участнику. 📊\n"
+                "• `/setlvl [5-20]` (ответом, по @username или ID) — выдать уровень и тачку участнику. 🏎️\n"
                 "• `/setname [Имя]` — изменить своё продюсерское имя в теге. 💎\n\n"
                 "👥 *Для всех участников чата:*\n"
-                "• `/my_level` — узнать свой текущий уровень. 📈\n"
-                "• Просто тегни меня (`@` имя бота), чтобы вызвать это меню! 🤖"
+                "• `/my_level` — узнать свой уровень и посмотреть на свою тачку! 📊\n"
+                "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
 
-# === ФУНКЦИЯ ПРОВЕРКИ ПРАВ ===
+# Функция проверки прав
 async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     try:
         member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
@@ -46,7 +65,7 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
         pass
     return "regular"
 
-# === 👑 КОМАНДА: ДОБАВИТЬ ПРОДЮСЕРА (Фулл права) ===
+# Команда: Добавить Продюсера
 async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -61,16 +80,14 @@ async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Ответь на сообщение пользователя и напиши `/addprod [Имя]`")
             return
             
-        # Проверка лимита (до 10 продюсеров)
         try:
             admins = await context.bot.get_chat_administrators(chat_id=chat_id)
             current_producers = sum(1 for a in admins if a.custom_title and a.custom_title.strip().lower().startswith("прод."))
-            
             if current_producers >= 10:
                 await update.message.reply_text(f"❌ Лимит! В чате уже {current_producers} продюсеров из 10.")
                 return
-        except Exception as e:
-            print(f"Ошибка подсчета: {e}")
+        except:
+            pass
 
         target_user = update.message.reply_to_message.from_user
         custom_name = " ".join(context.args) if context.args else "продюсер"
@@ -85,20 +102,12 @@ async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-        # === ВЫДАЧА АБСОЛЮТНО ВСЕХ ПРАВ АДМИНИСТРАТОРА ТГ ===
         await context.bot.promote_chat_member(
-            chat_id=chat_id,
-            user_id=target_user.id,
-            can_manage_chat=True,
-            can_change_info=True,
-            can_delete_messages=True,
-            can_restrict_members=True,
-            can_invite_users=True,
-            can_pin_messages=True,
-            can_manage_video_chats=True,
-            can_manage_topics=True
+            chat_id=chat_id, user_id=target_user.id,
+            can_manage_chat=True, can_change_info=True, can_delete_messages=True,
+            can_restrict_members=True, can_invite_users=True, can_pin_messages=True,
+            can_manage_video_chats=True, can_manage_topics=True
         )
-        
         await asyncio.sleep(1)
         await context.bot.set_chat_administrator_custom_title(
             chat_id=chat_id, user_id=target_user.id, custom_title=title
@@ -107,14 +116,14 @@ async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"🎬 *{target_user.first_name}* назначен новым Продюсером чата!\n"
-                 f"Ему выданы *ВСЕ права администратора* ТГ! 👑\n"
+                 f"Ему выданы *ВCE права администратора* ТГ! 👑\n"
                  f"Его статус: *{title}* 💎",
             parse_mode="Markdown"
         )
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка при добавлении: {e}")
 
-# === 👑 КОМАНДА: СНЯТЬ ПРОДЮСЕРА (Полное разжалование) ===
+# Команда: Снять Продюсера
 async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -141,18 +150,11 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
             
-        # === ПОЛНОЕ ОБНУЛЕНИЕ ВСЕХ ПРАВ АДМИНИСТРАТОРА ===
         await context.bot.promote_chat_member(
-            chat_id=chat_id,
-            user_id=target_user.id,
-            can_manage_chat=False,
-            can_change_info=False,
-            can_delete_messages=False,
-            can_restrict_members=False,
-            can_invite_users=False,
-            can_pin_messages=False,
-            can_manage_video_chats=False,
-            can_manage_topics=False
+            chat_id=chat_id, user_id=target_user.id,
+            can_manage_chat=False, can_change_info=False, can_delete_messages=False,
+            can_restrict_members=False, can_invite_users=False, can_pin_messages=False,
+            can_manage_video_chats=False, can_manage_topics=False
         )
         
         if target_user.id in user_levels:
@@ -166,7 +168,7 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка при увольнении: {e}")
 
-# === КОМАНДА: Смена уровня ===
+# Команда: Смена уровня (/setlvl)
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -174,7 +176,7 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         sender_status = await get_user_status(chat_id, sender_id, context)
         if sender_status not in ["owner", "producer"]:
-            await update.message.reply_text("❌ Менять уровни могут только Продюсеры или Создатель чата.")
+            await update.message.reply_text("❌ Менять уровни могут только Продюсеров или Создатель чата.")
             return
 
         target_user_id = None
@@ -228,7 +230,6 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ Введи @юзернейм или цифровой ID!")
                 return
 
-        # Защита иерархии (продюсеры меняют уровни ТОЛЬКО простым участникам)
         target_status = await get_user_status(chat_id, target_user_id, context)
         if target_status in ["owner", "producer"]:
             await update.message.reply_text("❌ Ошибка! Менять уровень Создателю чата или Продюсерам строго запрещено.")
@@ -238,8 +239,11 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Можно устанавливать только уровни от 5 до 20, бро.")
             return
 
-        title = f"{level} лвл"
+        # === 🌟 ИЗМЕНЕНИЕ: ТЕПЕРЬ ТЕГ НА ЛАТИНИЦЕ (lvl) 🌟 ===
+        title = f"{level} lvl"
         user_levels[target_user_id] = level
+        
+        car_name = CAR_RANKS.get(level, "Неизвестное авто")
         
         try:
             await update.message.delete()
@@ -247,7 +251,6 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         
         try:
-            # Для простых уровней даем базовые права, чтобы просто держался кастомный тег
             await context.bot.promote_chat_member(
                 chat_id=chat_id, user_id=target_user_id, can_manage_chat=True, can_invite_users=True
             )
@@ -255,21 +258,22 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.set_chat_administrator_custom_title(
                 chat_id=chat_id, user_id=target_user_id, custom_title=title
             )
-            tag_status = "✅ Тег успешно установлен!"
+            tag_status = "✅ Админ-тег успешно установлен!"
         except Exception as e:
             tag_status = f"⚠️ Уровень изменен, но тег не повесился. Ошибка: {e}"
 
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🎉 *{target_user_name}* 🎉\n\n"
-                 f"Твой новый статус: *{title}*! 🔥\n\n"
+            text=f"🎉 *{target_user_name}* прокачал свой статус! 🎉\n\n"
+                 f"📊 Новый уровень: *{title}*\n"
+                 f"🏎️ Твоя новая тачка: *{car_name}* 🔥\n\n"
                  f"_{tag_status}_",
             parse_mode="Markdown"
         )
     except Exception as e:
         await update.message.reply_text(f"❌ Системная ошибка: {e}")
 
-# === КОМАНДА: Смена ника продюсера ===
+# Команда: Смена ника продюсера (/setname)
 async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -300,7 +304,6 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.set_chat_administrator_custom_title(
                 chat_id=chat_id, user_id=user.id, custom_title=title
             )
-            
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🎬 *{user.first_name}* обновил свой продюсерский статус:\n"
@@ -312,24 +315,33 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка в setname: {e}")
 
+# Команда: Мой уровень (/my_level)
 async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     level = user_levels.get(user_id, 1)
-    await update.message.reply_text(f"📊 Твой уровень: *{level} лвл*", parse_mode="Markdown")
+    
+    car_info = ""
+    if level in CAR_RANKS:
+        car_info = f"\n🏎️ Твоя тачка в гараже: *{CAR_RANKS[level]}*"
+    else:
+        car_info = f"\n🚲 Пока гоняешь на велике, копи на Чепырку (нужен 5 lvl!)"
+
+    await update.message.reply_text(
+        f"📊 Твой текущий уровень: *{level} lvl*{car_info}", 
+        parse_mode="Markdown"
+    )
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # Хэндлер ловит текст (ищет юзернеймы + проверяет упоминание @bot)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_users))
-    
     app.add_handler(CommandHandler("addprod", add_producer))
     app.add_handler(CommandHandler("delprod", delete_producer))
     app.add_handler(CommandHandler("setlvl", set_level))
     app.add_handler(CommandHandler("setname", set_name))
     app.add_handler(CommandHandler("my_level", my_level))
     
-    print("🤖 Бот успешно обновлен! Включены фулл-права админа для продюсеров и вызов справки по тегу.")
+    print("🤖 Бот запущен! Теги переведены на формат '[число] lvl'.")
     app.run_polling()
 
 if __name__ == "__main__":
