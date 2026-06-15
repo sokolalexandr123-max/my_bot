@@ -15,6 +15,7 @@ DATA_DIR = os.getenv('DATA_DIR', '/app/data')
 DATA_FILE = os.path.join(DATA_DIR, 'levels.json')
 CHATS_FILE = os.path.join(DATA_DIR, 'managed_chats.json')  
 SECRETS_FILE = os.path.join(DATA_DIR, 'secrets.json')  
+USERNAMES_FILE = os.path.join(DATA_DIR, 'usernames.json')
 
 SUPER_ADMIN_ID = 0
 
@@ -43,7 +44,25 @@ def save_super_admin(user_id: int):
     except Exception as e:
         print(f"Runtime error: {e}")
 
+def load_usernames():
+    global username_to_id
+    if os.path.exists(USERNAMES_FILE):
+        try:
+            with open(USERNAMES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                username_to_id = {k: int(v) for k, v in data.items()}
+            except:
+                username_to_id = {}
+
+def save_usernames():
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(USERNAMES_FILE, "w", encoding="utf-8") as f:
+            json.dump(username_to_id, f, ensure_ascii=False, indent=4)
+    except Exception as e: print(f"Runtime error: {e}")
+
 load_super_admin()
+load_usernames()
 
 def load_managed_chats() -> dict:
     if os.path.exists(CHATS_FILE):
@@ -121,29 +140,27 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     return "regular"
 
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    if update.message.reply_to_message:
+    if context.args:
+        first_arg = context.args[0]
+        
+        if first_arg.startswith("@"):
+            uname = first_arg.replace("@", "").lower()
+            if uname in username_to_id:
+                return username_to_id[uname], first_arg, context.args[1:]
+            return None, first_arg, context.args[1:]
+            
+        if first_arg.isdigit() and len(first_arg) > 4:
+            uid = int(first_arg)
+            try:
+                m = await context.bot.get_chat_member(chat_id=chat_id, user_id=uid)
+                return uid, m.user.first_name, context.args[1:]
+            except:
+                return uid, "User", context.args[1:]
+
+    if update.message and update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
         return target.id, target.first_name, context.args
         
-    if not context.args: return None, None, []
-    first_arg = context.args[0]
-    rem_args = context.args[1:]
-    
-    if first_arg.isdigit():
-        uid = int(first_arg)
-        try:
-            m = await context.bot.get_chat_member(chat_id=chat_id, user_id=uid)
-            return uid, m.user.first_name, rem_args
-        except: return uid, "Пользователь", rem_args
-            
-    if first_arg.startswith("@"):
-        uname = first_arg.replace("@", "").lower()
-        if uname in username_to_id:
-            uid = username_to_id[uname]
-            try:
-                m = await context.bot.get_chat_member(chat_id=chat_id, user_id=uid)
-                return uid, m.user.first_name, rem_args
-            except: return uid, first_arg, rem_args
     return None, None, []
 
 def get_main_menu_text() -> str:
@@ -171,7 +188,10 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not chat or not user: return
     
     if user.username:
-        username_to_id[user.username.lower()] = user.id
+        uname_lower = user.username.lower()
+        if username_to_id.get(uname_lower) != user.id:
+            username_to_id[uname_lower] = user.id
+            save_usernames()
     
     if chat.type != "private" and update.message and update.message.text:
         chats = load_managed_chats()
