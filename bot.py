@@ -205,7 +205,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             quotes.append({"author": user.first_name, "text": update.message.text})
             save_quotes(chat.id, quotes)
             
-       bot_user = await context.bot.get_me()
+        bot_user = await context.bot.get_me()
         if f"@{bot_user.username.lower()}" in update.message.text.lower():
             help_text = (
                 "📋 *СПРАВКА ПО КОМАНДАМ БОТА*\n\n"
@@ -223,7 +223,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• _Просто тегни меня (@), чтобы вызвать это меню!_ 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
-
+            
 async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global SUPER_ADMIN_ID
     user_id = update.effective_user.id
