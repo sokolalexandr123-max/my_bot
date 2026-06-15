@@ -412,4 +412,4 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(1)
         await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title=f"{level} lvl")
 
-        await context.bot.send_message(chat_id=chat_id, text=f"🎉 *{tname}* повышен до *{level} lvl*!\
+        await context.bot.send_message(chat_id=chat_id, text=f"🎉 *{tname}* повышен до *{level} lvl*! 🏎️ Выдана тачка: *{car_name}* 🔥", parse_mode="Markdown")
