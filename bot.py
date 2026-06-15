@@ -205,9 +205,24 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             quotes.append({"author": user.first_name, "text": update.message.text})
             save_quotes(chat.id, quotes)
             
-        bot_user = await context.bot.get_me()
+       bot_user = await context.bot.get_me()
         if f"@{bot_user.username.lower()}" in update.message.text.lower():
-            await update.message.reply_text("🤖 Бот активен. Управление доступно администрации.", parse_mode="Markdown")
+            help_text = (
+                "📋 *СПРАВКА ПО КОМАНДАМ БОТА*\n\n"
+                "👑 *Только для Создателя чата:*\n"
+                "• `/addprod [Имя]` (ответом) — назначить Продюсера. 🔥\n"
+                "• `/delprod` (ответом) — снять Продюсера (авто-сброс на 5 lvl). 📉\n\n"
+                "🎬 *Для Продюсеров и Создателя:*\n"
+                "• `/setlvl [5-20]` (ответом, по @username или ID) — выдать уровень и тачку. 🏎️\n"
+                "• `/setname [Имя]` — изменить своё продюсерское имя в теге. 💎\n"
+                "• `/setcar [Название]` — поставить себе ЛЮБУЮ кастомную тачку! 🚀\n"
+                "• `/clean` (ответом) — зачистить все права чела до базового 5 lvl. 🧹\n\n"
+                "👥 *Для всех участников чата:*\n"
+                "• `/my_level` — узнать свой уровень и тачку! 📊\n"
+                "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
+                "• _Просто тегни меня (@), чтобы вызвать это меню!_ 🤖"
+            )
+            await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global SUPER_ADMIN_ID
