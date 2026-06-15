@@ -12,8 +12,11 @@ load_dotenv()
 BOT_TOKEN = os.getenv("MY_SECRET_TOKEN")
 SECRET_PASSWORD = os.getenv("SECRET_PASSWORD", "default_secure_knock_99x")
 
-# Настройки путей для Ботхоста
-DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+# Динамические и безопасные пути для Ботхоста
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+os.makedirs(DATA_DIR, exist_ok=True)
+
 DATA_FILE = os.path.join(DATA_DIR, 'levels.json')
 CHATS_FILE = os.path.join(DATA_DIR, 'managed_chats.json')  
 SECRETS_FILE = os.path.join(DATA_DIR, 'secrets.json')  
@@ -153,10 +156,6 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     return "regular"
 
 async def get_target_user(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
-    """
-    Умный поиск цели: Сначала проверяет явный @тег или цифровой ID в аргументах.
-    Если аргументов нет, но есть Reply (ответ на сообщение) — берет автора сообщения.
-    """
     if context.args:
         first_arg = context.args[0]
         
@@ -201,14 +200,13 @@ def get_chat_menu_text(chat_name: str) -> str:
         f"3. 🔙 *Назад к списку чатов*"
     )
 
-# --- ДЕЖУРНЫЕ ОБРАБОТЧИКИ (МЕНЕДЖЕРЫ ТЕКСТА) ---
+# --- ДЕЖУРНЫЕ ОБРАБОТЧИКИ ---
 
 async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
     if not chat or not user: return
     
-    # Запоминаем связку юзернейм -> ID в глобальную базу
     if user.username:
         uname_lower = user.username.lower()
         if username_to_id.get(uname_lower) != user.id:
@@ -222,13 +220,11 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chats[chat_id_str] = chat.title or "Безымянная группа"
             save_managed_chats(chats)
 
-        # Логируем текст в цитатник, только если это обычное общение (НЕ команда бота)
         if not update.message.text.startswith('/') and not user.is_bot:
             quotes = load_quotes(chat.id)
             quotes.append({"author": user.first_name, "text": update.message.text})
             save_quotes(chat.id, quotes)
             
-            # Интерактивный Хелп-меню вместо старой фразы
             bot_user = await context.bot.get_me()
             if f"@{bot_user.username.lower()}" in update.message.text.lower():
                 help_text = (
@@ -250,7 +246,6 @@ async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Стейдж 0: Первая авторизация создателя
     if SUPER_ADMIN_ID == 0:
         if text == SECRET_PASSWORD:
             save_super_admin(user_id)
@@ -263,7 +258,6 @@ async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text(get_main_menu_text(), parse_mode="Markdown")
         return
 
-    # Защита ЛС от посторонних юзеров
     if user_id != SUPER_ADMIN_ID:
         return
 
@@ -274,7 +268,6 @@ async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(get_main_menu_text(), parse_mode="Markdown")
         return
 
-    # Стейдж 1: Выбор чата
     if state == 'WAIT_CHAT_CHOICE':
         chats = load_managed_chats()
         indexed_chats = {i+1: (int(cid), name) for i, (cid, name) in enumerate(chats.items())}
@@ -289,7 +282,6 @@ async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_
         else:
             await update.message.reply_text("🔢 Пришли корректную цифру чата из списка!")
 
-    # Стейдж 2: Меню действий внутри чата
     elif state == 'CHAT_MENU':
         chat_id = context.user_data.get('active_chat_id')
         chat_name = context.user_data.get('active_chat_name')
@@ -317,3 +309,107 @@ async def handle_private_messages(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text(get_main_menu_text(), parse_mode="Markdown")
         else:
             await update.message.reply_text("❌ Введи цифру 1, 2 или 3.")
+
+    elif state == 'ADMIN_CONSOLE':
+        if text == "/back":
+            context.user_data['state'] = 'CHAT_MENU'
+            await update.message.reply_text(get_chat_menu_text(context.user_data.get('active_chat_name')), parse_mode="Markdown")
+        else:
+            if not text.startswith('/'):
+                await update.message.reply_text(
+                    "📟 *Режим терминала.*\n"
+                    "Пример: `/setlvl @username 12`.\n"
+                    "Для выхода пришли: `/back`"
+                )
+
+async def guard_pm_console(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if update.effective_chat.type == "private":
+        if update.effective_user.id != SUPER_ADMIN_ID: return False
+        if context.user_data.get('state') != 'ADMIN_CONSOLE':
+            await update.message.reply_text("❌ Зайди в Консоль админа через меню выбора чата!")
+            return False
+    return True
+
+# --- ИСПОЛНИТЕЛЬНЫЕ КОМАНДЫ БОТА ---
+
+async def set_bulat_director(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await guard_pm_console(update, context): return
+    try:
+        chat_id = get_active_chat_id(update, context)
+        if await get_user_status(chat_id, update.effective_user.id, context) != "owner": return
+        tid, tname, rem_args = await get_target_user(update, context, chat_id)
+        if not tid: return
+
+        custom_title = " ".join(rem_args) if rem_args else "Директор"
+        title = custom_title[:16]
+
+        await context.bot.promote_chat_member(chat_id=chat_id, user_id=tid, can_manage_chat=True, can_delete_messages=True, can_restrict_members=True, can_invite_users=True, can_pin_messages=True)
+        await asyncio.sleep(1)
+        await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title=title)
+        
+        user_roles[tid] = "director"
+        save_data()
+        await context.bot.send_message(chat_id=chat_id, text=f"👑 *{tname}* назначен Директором! Статус: *{title}* 💎", parse_mode="Markdown")
+        if update.effective_chat.type == "private": await update.message.reply_text("✅ Директор успешно назначен!")
+    except Exception as e: await update.message.reply_text(f"Error: {e}")
+
+async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await guard_pm_console(update, context): return
+    try:
+        chat_id = get_active_chat_id(update, context)
+        if await get_user_status(chat_id, update.effective_user.id, context) != "owner": return
+        tid, tname, rem_args = await get_target_user(update, context, chat_id)
+        if not tid: return
+
+        custom_name = " ".join(rem_args) if rem_args else tname
+        title = f"Прод {custom_name}"[:16]
+
+        await context.bot.promote_chat_member(chat_id=chat_id, user_id=tid, can_manage_chat=True, can_delete_messages=True, can_restrict_members=True, can_invite_users=True, can_pin_messages=True)
+        await asyncio.sleep(1)
+        await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title=title)
+        
+        await context.bot.send_message(chat_id=chat_id, text=f"🎬 *{tname}* назначен Продюсером! Тег: *{title}* 💎", parse_mode="Markdown")
+        if update.effective_chat.type == "private": await update.message.reply_text("✅ Продюсер назначен!")
+    except Exception as e: await update.message.reply_text(f"Error: {e}")
+
+async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await guard_pm_console(update, context): return
+    try:
+        chat_id = get_active_chat_id(update, context)
+        if await get_user_status(chat_id, update.effective_user.id, context) != "owner": return
+        tid, tname, _ = await get_target_user(update, context, chat_id)
+        if not tid: return
+            
+        await context.bot.promote_chat_member(chat_id=chat_id, user_id=tid, can_manage_chat=True, can_change_info=False, can_delete_messages=False, can_restrict_members=False, can_invite_users=False, can_pin_messages=False)
+        await asyncio.sleep(1)
+        await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title="5 lvl")
+        
+        user_levels[tid] = 5
+        if tid in user_cars: del user_cars[tid]
+        if tid in user_roles: del user_roles[tid]
+        save_data()
+        await context.bot.send_message(chat_id=chat_id, text=f"📉 *{tname}* разжалован и сброшен на *5 lvl*!", parse_mode="Markdown")
+        if update.effective_chat.type == "private": await update.message.reply_text("✅ Успешно.")
+    except Exception as e: await update.message.reply_text(f"Error: {e}")
+
+async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await guard_pm_console(update, context): return
+    try:
+        chat_id = get_active_chat_id(update, context)
+        if await get_user_status(chat_id, update.effective_user.id, context) not in ["owner", "producer", "director"]: return
+        tid, tname, rem_args = await get_target_user(update, context, chat_id)
+        if not tid or not rem_args: return
+            
+        try: level = int(rem_args[0])
+        except: return
+        if level < 5 or level > 20: return
+
+        user_levels[tid] = level
+        save_data()
+        car_name = CAR_RANKS.get(level, "Неизвестное авто")
+        
+        await context.bot.promote_chat_member(chat_id=chat_id, user_id=tid, can_manage_chat=True)
+        await asyncio.sleep(1)
+        await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title=f"{level} lvl")
+
+        await context.bot.send_message(chat_id=chat_id, text=f"🎉 *{tname}* повышен до *{level} lvl*!\
