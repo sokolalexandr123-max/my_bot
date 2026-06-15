@@ -393,24 +393,47 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e: await update.message.reply_text(f"Error: {e}")
 
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await guard_pm_console(update, context): return
+    # Проверка доступа
+    if not await guard_pm_console(update, context): 
+        return
+    
     try:
         chat_id = get_active_chat_id(update, context)
-        if await get_user_status(chat_id, update.effective_user.id, context) not in ["owner", "producer", "director"]: return
-        tid, tname, rem_args = await get_target_user(update, context, chat_id)
-        if not tid or not rem_args: return
+        # Проверка прав администратора
+        status = await get_user_status(chat_id, update.effective_user.id, context)
+        if status not in ["owner", "producer", "director"]: 
+            return
             
-        try: level = int(rem_args[0])
-        except: return
-        if level < 5 or level > 20: return
+        tid, tname, rem_args = await get_target_user(update, context, chat_id)
+        if not tid or not rem_args: 
+            return
+            
+        try: 
+            level = int(rem_args[0])
+        except ValueError: 
+            return
+            
+        if level < 5 or level > 20: 
+            return
 
+        # Обновление данных
         user_levels[tid] = level
         save_data()
         car_name = CAR_RANKS.get(level, "Неизвестное авто")
         
+        # Действия в Telegram
         await context.bot.promote_chat_member(chat_id=chat_id, user_id=tid, can_manage_chat=True)
         await asyncio.sleep(1)
         await context.bot.set_chat_administrator_custom_title(chat_id=chat_id, user_id=tid, custom_title=f"{level} lvl")
 
-       msg_text = f"🎉 *{tname}* повышен до *{level} lvl*! 🏎️ Выдана тачка: *{car_name}* 🔥"
+        # Отправка сообщения
+        msg_text = f"🎉 *{tname}* повышен до *{level} lvl*! 🏎️ Выдана тачка: *{car_name}* 🔥"
         await context.bot.send_message(chat_id=chat_id, text=msg_text, parse_mode="Markdown")
+        
+        if update.effective_chat.type == "private": 
+            await update.message.reply_text("✅ Уровень успешно изменен!")
+
+    except Exception as e: 
+        # Блок, который закрывает try и ловит возможные ошибки API
+        print(f"Ошибка в функции set_level: {e}")
+        await update.message.reply_text(f"Произошла ошибка: {e}")
