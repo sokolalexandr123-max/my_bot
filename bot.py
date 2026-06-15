@@ -1,18 +1,25 @@
 import asyncio
 import json
 import os
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ⚠️ Вставь сюда токен своего бота от @BotFather
-BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
-DATA_FILE = "levels.json"
+# 💾 ЗАГРУЗКА СКРЫТЫХ ПЕРЕМЕННЫХ (.env)
+load_dotenv()
+
+# 🔐 Бот берет токен из скрытого файла системы
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# 📂 Настройка бессмертной папки для сохранения данных (требование хостинга)
+DATA_DIR = os.getenv('DATA_DIR', '/app/data')
+DATA_FILE = os.path.join(DATA_DIR, 'levels.json')
 
 username_to_id = {}
 user_levels = {}
 user_cars = {}  # Здесь хранятся кастомные тачки продюсеров
 
-# 💾 СОВЕРШЕННАЯ ЛОГИКА СХРАНЕНИЯ (С ПОДДЕРЖКОЙ КАСТОМНЫХ ТАЧЕК)
+# 💾 СОВЕРШЕННАЯ ЛОГИКА СОХРАНЕНИЯ
 def load_data():
     """Загрузка уровней и кастомных тачек из файла"""
     global user_levels, user_cars
@@ -21,27 +28,26 @@ def load_data():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 
-                # Проверяем структуру файла (новая комбинированная или старая плоская)
                 if "levels" in data or "cars" in data:
                     levels = data.get("levels", {})
                     cars = data.get("cars", {})
                     user_levels = {int(k): v for k, v in levels.items()}
                     user_cars = {int(k): v for k, v in cars.items()}
                 else:
-                    # Старый формат: файл содержал только уровни
                     user_levels = {int(k): v for k, v in data.items()}
                     user_cars = {}
                 return
         except Exception as e:
             print(f"❌ Ошибка загрузки данных: {e}")
     
-    # Если файла нет, оставляем пустыми
     user_levels = {}
     user_cars = {}
 
 def save_data():
     """Сохранение всех данных в один файл"""
     try:
+        # На всякий случай проверяем, создана ли папка /app/data
+        os.makedirs(DATA_DIR, exist_ok=True)
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             combined_data = {
                 "levels": user_levels,
@@ -111,9 +117,6 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
         pass
     return "regular"
 
-# ========================================================
-# 1. КОМАНДА /addprod
-# ========================================================
 async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -149,22 +152,11 @@ async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"🎬 *{target_user.first_name}* назначен Продюсером чата!\nЕго статус: *{title}* 💎",
             parse_mode="Markdown"
         )
-        
         try: await update.message.delete()
         except: pass
-
     except Exception as e:
-        await update.message.reply_text(
-            f"❌ Ошибка Telegram API при добавлении продюсера:\n`{e}`\n\n"
-            f"📌 **Чек-лист для исправления:**\n"
-            f"1. Зайди в настройки группы -> Админы -> Нажми на бота и **включи ему ВСЕ тумблеры прав**.\n"
-            f"2. Убедись, что юзер, на которого ты ответил — **обычный участник**.", 
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(f"❌ Ошибка Telegram API при добавлении продюсера:\n`{e}`", parse_mode="Markdown")
 
-# ========================================================
-# 2. КОМАНДА /delprod 
-# ========================================================
 async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -184,8 +176,7 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.promote_chat_member(
             chat_id=chat_id, user_id=target_user.id,
             can_manage_chat=True, can_change_info=False, can_delete_messages=False,
-            can_restrict_members=False, can_invite_users=False, can_pin_messages=False,
-            can_manage_video_chats=False, can_manage_topics=False
+            can_restrict_members=False, can_invite_users=False, can_pin_messages=False
         )
         await asyncio.sleep(1)
         
@@ -193,7 +184,6 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_user.id, custom_title="5 lvl"
         )
         user_levels[target_user.id] = 5
-        # Удаляем кастомную тачку, если она была
         if target_user.id in user_cars:
             del user_cars[target_user.id]
         save_data()
@@ -203,15 +193,11 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"📉 *{target_user.first_name}* снят с должности Продюсера и автоматически переведен на *5 lvl*! 🎖️",
             parse_mode="Markdown"
         )
-        
         try: await update.message.delete()
         except: pass
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка при увольнении: `{e}`", parse_mode="Markdown")
 
-# ========================================================
-# 3. КОМАНДА /setlvl
-# ========================================================
 async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -298,15 +284,11 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"🎉 *{target_user_name}* прокачал свой статус! 🎉\n\n📊 Новый уровень: *{title}*\n🏎️ Твоя новая тачка: *{car_name}* 🔥",
             parse_mode="Markdown"
         )
-        
         try: await update.message.delete()
         except: pass
     except Exception as e:
         await update.message.reply_text(f"❌ Не удалось выдать уровень: `{e}`", parse_mode="Markdown")
 
-# ========================================================
-# 4. КОМАНДА /setcar (КАСТОМНАЯ ТАЧКА ДЛЯ АДМИНОВ)
-# ========================================================
 async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -318,7 +300,7 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         if not context.args:
-            await update.message.reply_text("❌ Напиши название транспорта после команды, например: `/setcar Межгалактический Крейсер`")
+            await update.message.reply_text("❌ Напиши название транспорта: `/setcar Межгалактический Крейсер`")
             return
             
         custom_car = " ".join(context.args)
@@ -327,7 +309,7 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🚀 Продюсер *{user.first_name}* обновил свой личный транспорт!\nТеперь твой аппарат: *{custom_car}* 🔥",
+            text=f"🚀 Продюсер *{user.first_name}* обновил свой личный transport!\nТеперь твой аппарат: *{custom_car}* 🔥",
             parse_mode="Markdown"
         )
         try: await update.message.delete()
@@ -335,9 +317,6 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка установки кастомной тачки: `{e}`", parse_mode="Markdown")
 
-# ========================================================
-# 5. КОМАНДА /clean 
-# ========================================================
 async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -361,8 +340,7 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.promote_chat_member(
             chat_id=chat_id, user_id=target_user.id,
             can_manage_chat=True, can_change_info=False, can_delete_messages=False,
-            can_restrict_members=False, can_invite_users=False, can_pin_messages=False,
-            can_manage_video_chats=False, can_manage_topics=False
+            can_restrict_members=False, can_invite_users=False, can_pin_messages=False
         )
         await asyncio.sleep(1)
         
@@ -379,7 +357,6 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=f"🧹 Все административные права пользователя *{target_user.first_name}* аннулированы. Он сброшен до базового *5 lvl*.",
             parse_mode="Markdown"
         )
-        
         try: await update.message.delete()
         except: pass
     except Exception as e:
@@ -418,12 +395,10 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # 🏎️ Проверяем, есть ли у пользователя кастомная тачка
     if user_id in user_cars:
-        car_info = f"\n🏎️ Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
+        car_info = f"\n🏎 convert Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
         level_info = "Админ-статус"
     else:
-        # Если кастомной нет, берем стандартный левел
         level = user_levels.get(user_id, 1)
         level_info = f"{level} lvl"
         if level in CAR_RANKS:
