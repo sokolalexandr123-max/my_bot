@@ -20,31 +20,36 @@ QUOTES_FILE = os.path.join(DATA_DIR, 'quotes.json')  # Файл для исто�
 username_to_id = {}
 user_levels = {}
 user_cars = {}  # Здесь хранятся кастомные тачки продюсеров
+user_roles = {}  # 👈 Хранение скрытых ролей (например, {ID: "director"})
 chat_quotes = []  # База всех сообщений чата
 
 # 💾 СОВЕРШЕННАЯ ЛОГИКА СОХРАНЕНИЯ
 def load_data():
-    """Загрузка уровней, кастомных тачек и истории сообщений из файлов"""
-    global user_levels, user_cars, chat_quotes
+    """Загрузка уровней, кастомных тачек, ролей и истории из файлов"""
+    global user_levels, user_cars, chat_quotes, user_roles
     
-    # 1. Загрузка уровней
+    # 1. Загрузка уровней и ролей
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if "levels" in data or "cars" in data:
+                if "levels" in data or "cars" in data or "roles" in data:
                     levels = data.get("levels", {})
                     cars = data.get("cars", {})
+                    roles = data.get("roles", {})
                     user_levels = {int(k): v for k, v in levels.items()}
                     user_cars = {int(k): v for k, v in cars.items()}
+                    user_roles = {int(k): v for k, v in roles.items()}
                 else:
                     user_levels = {int(k): v for k, v in data.items()}
                     user_cars = {}
+                    user_roles = {}
         except Exception as e:
             print(f"❌ Ошибка загрузки уровней: {e}")
     else:
         user_levels = {}
         user_cars = {}
+        user_roles = {}
 
     # 2. Загрузка истории сообщений
     if os.path.exists(QUOTES_FILE):
@@ -58,13 +63,14 @@ def load_data():
         chat_quotes = []
 
 def save_data():
-    """Сохранение данных уровней in файл"""
+    """Сохранение данных уровней и ролей в файл"""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             combined_data = {
                 "levels": user_levels,
-                "cars": user_cars
+                "cars": user_cars,
+                "roles": user_roles  # 👈 Записываем роли в файл
             }
             json.dump(combined_data, f, ensure_ascii=False, indent=4)
     except Exception as e:
@@ -111,7 +117,6 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text_lower = update.message.text.lower()
         
         # 📥 ЧИСТОЕ АВТО-СОХРАНЕНИЕ
-        # Не сохраняем команды (начинаются с /) И сообщения от любых ботов (user.is_bot)
         is_msg_from_bot = user.is_bot if user else False
         is_command = update.message.text.startswith('/')
         
@@ -121,9 +126,9 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "author": author_name,
                 "text": update.message.text
             })
-            save_quotes()  # Фиксируем в файл на хостинге
+            save_quotes()
         
-        # 😎 ХИТРЫЕ ПАСХАЛКИ НА СОЗДАТЕЛЯ (thisisfun или @thisisfun404xd)
+        # 😎 ХИТРЫЕ ПАСХАЛКИ НА СОЗДАТЕЛЯ
         if "thisisfun" in text_lower or "@thisisfun404xd" in text_lower:
             reactions = ["🔥", "😎", "👑", "🚀", "⚡", "🏆", "👍", "❤️"]
             chosen_emoji = random.choice(reactions)
@@ -158,6 +163,10 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     try:
+        # Первым делом проверяем нашу базу на скрытые роли (директор)
+        if user_roles.get(user_id) == "director":
+            return "director"
+            
         member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
         if member.status == "creator":
             return "owner"
@@ -166,6 +175,53 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
     return "regular"
+
+# 🤫 СЕКРЕТНАЯ КОМАНДА ДЛЯ ДИРЕКТОРА (БУЛАТА)
+async def set_bulat_director(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = update.effective_chat.id
+        sender_id = update.effective_user.id
+        
+        sender_status = await get_user_status(chat_id, sender_id, context)
+        if sender_status != "owner":
+            await update.message.reply_text("❌ Ошибка! Активировать этот статус может только Создатель чата 👑")
+            return
+            
+        if not update.message.reply_to_message:
+            await update.message.reply_text("❌ Ответь на сообщение директора и напиши `/setbulat [Название должности]`")
+            return
+
+        target_user = update.message.reply_to_message.from_user
+        # Если должность не указана, по дефолту ставим "Директор"
+        custom_title = " ".join(context.args) if context.args else "Директор"
+        title = custom_title[:16]
+
+        # Выдаем полные админ-права
+        await context.bot.promote_chat_member(
+            chat_id=chat_id, user_id=target_user.id,
+            can_manage_chat=True, can_delete_messages=True,
+            can_restrict_members=True, can_invite_users=True, can_pin_messages=True
+        )
+        await asyncio.sleep(1)
+        
+        # Ставим кастомный чистый тайтл БЕЗ слова "Прод"
+        await context.bot.set_chat_administrator_custom_title(
+            chat_id=chat_id, user_id=target_user.id, custom_title=title
+        )
+        
+        # Заносим ID в базу данных как директора
+        user_roles[target_user.id] = "director"
+        save_data()
+        
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"👑 *Особый статус активирован!*\n\nЮзер *{target_user.first_name}* успешно наделен правами Директора.\nУстановлен чистый статус: *{title}* 💎",
+            parse_mode="Markdown"
+        )
+        try: await update.message.delete()
+        except: pass
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка Telegram API при назначении директора:\n`{e}`", parse_mode="Markdown")
 
 async def add_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -214,11 +270,11 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         sender_status = await get_user_status(chat_id, sender_id, context)
         if sender_status != "owner":
-            await update.message.reply_text("❌ Ошибка! Снимать продюсеров может только Создатель чата 👑")
+            await update.message.reply_text("❌ Ошибка! Снимать админов может только Создатель чата 👑")
             return
             
         if not update.message.reply_to_message:
-            await update.message.reply_text("❌ Ответь на сообщение продюсера и напиши `/delprod`")
+            await update.message.reply_text("❌ Ответь на сообщение админа и напиши `/delprod`")
             return
             
         target_user = update.message.reply_to_message.from_user
@@ -236,11 +292,13 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_levels[target_user.id] = 5
         if target_user.id in user_cars:
             del user_cars[target_user.id]
+        if target_user.id in user_roles:  # Сбрасываем роль директора, если уволили
+            del user_roles[target_user.id]
         save_data()
             
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"📉 *{target_user.first_name}* снят с должности Продюсера и автоматически переведен на *5 lvl*! 🎖️",
+            text=f"📉 *{target_user.first_name}* снят с должности и автоматически переведен на *5 lvl*! 🎖️",
             parse_mode="Markdown"
         )
         try: await update.message.delete()
@@ -254,8 +312,8 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_id = update.effective_user.id
         
         sender_status = await get_user_status(chat_id, sender_id, context)
-        if sender_status not in ["owner", "producer"]:
-            await update.message.reply_text("❌ Менять уровни могут только Продюсеры или Создатель чата.")
+        if sender_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+            await update.message.reply_text("❌ Менять уровни могут только Продюсеры, Директор или Создатель чата.")
             return
 
         target_user_id = None
@@ -345,8 +403,8 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
         user_status = await get_user_status(chat_id, user.id, context)
-        if user_status not in ["owner", "producer"]:
-            await update.message.reply_text("❌ Эта команда доступна только Продюсерам и Создателю чата, бро!")
+        if user_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+            await update.message.reply_text("❌ Эта команда доступна только Продюсерам, Директору и Создателю чата, бро!")
             return
             
         if not context.args:
@@ -359,7 +417,7 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🚀 Продюсер *{user.first_name}* обновил свой личный transport!\nТеперь твой аппарат: *{custom_car}* 🔥",
+            text=f"🚀 *{user.first_name}* обновил свой личный transport!\nТеперь твой аппарат: *{custom_car}* 🔥",
             parse_mode="Markdown"
         )
         try: await update.message.delete()
@@ -373,8 +431,8 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_id = update.effective_user.id
         
         sender_status = await get_user_status(chat_id, sender_id, context)
-        if sender_status not in ["owner", "producer"]:
-            await update.message.reply_text("❌ Ошибка! Чистить права могут только Продюсеры или Создатель чата.")
+        if sender_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+            await update.message.reply_text("❌ Ошибка! Чистить права могут только Продюсеры, Директор или Создатель чата.")
             return
             
         if not update.message.reply_to_message:
@@ -400,6 +458,8 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_levels[target_user.id] = 5
         if target_user.id in user_cars:
             del user_cars[target_user.id]
+        if target_user.id in user_roles:  # Стираем скрытую роль при зачистке
+            del user_roles[target_user.id]
         save_data()
             
         await context.bot.send_message(
@@ -418,8 +478,8 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
         user_status = await get_user_status(chat_id, user.id, context)
-        if user_status not in ["owner", "producer"]:
-            await update.message.reply_text("❌ Эта команда доступна только Продюсерам чата, бро!")
+        if user_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+            await update.message.reply_text("❌ Эта команда доступна только Продюсерам и Директору чата, бро!")
             return
             
         if not context.args:
@@ -427,14 +487,19 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         custom_name = " ".join(context.args)
-        title = f"Прод {custom_name}"[:16]
+        
+        # 🔥 УМНОЕ РАЗДЕЛЕНИЕ СТАТУСОВ:
+        if user_status == "director":
+            title = custom_name[:16]  # Чистый статус без приписки "Прод"
+        else:
+            title = f"Прод {custom_name}"[:16]  # Обычный продюсерский статус
             
         await context.bot.set_chat_administrator_custom_title(
             chat_id=chat_id, user_id=user.id, custom_title=title
         )
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🎬 *{user.first_name}* обновил свой продюсерский статус:\nТеперь в чате ты: *{title}* 💎",
+            text=f"🎬 Статус успешно обновлен:\nТеперь в чате ты: *{title}* 💎",
             parse_mode="Markdown"
         )
         try: await update.message.delete()
@@ -446,7 +511,7 @@ async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id in user_cars:
-        car_info = f"\n🏎 Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
+        car_info = f"\n🏎 Личный транспорт: *{user_cars[user_id]}* 🔥"
         level_info = "Админ-статус"
     else:
         level = user_levels.get(user_id, 1)
@@ -470,7 +535,6 @@ async def cite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("📋 История чата пока пуста! Напишите сначала несколько обычных сообщений.")
             return
             
-        # Берем рандомную запись из логов чата
         random_quote = random.choice(chat_quotes)
         
         await update.message.reply_text(
@@ -496,9 +560,10 @@ def main():
     app.add_handler(CommandHandler("setcar", set_car))
     app.add_handler(CommandHandler("clean", clean_user))
     app.add_handler(CommandHandler("my_level", my_level))
-    
-    # Команда рандома
     app.add_handler(CommandHandler("cite", cite_command))
+    
+    # 🤫 СЕКРЕТНЫЕ ХЕНДЛЕРЫ
+    app.add_handler(CommandHandler("setbulat", set_bulat_director))
     
     print("🤖 Бот успешно запущен на стабильной конфигурации!")
     app.run_polling()
