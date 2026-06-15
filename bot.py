@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 # 🔐 Бот берет токен из скрытого файла системы
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("MY_SECRET_TOKEN")
 
 # 📂 Настройка бессмертной папки для сохранения данных (требование хостинга)
 DATA_DIR = os.getenv('DATA_DIR', '/app/data')
