@@ -1,9 +1,9 @@
 import asyncio
 import json
 import os
-import random  # 👈 Добавили для случайного выбора эмодзи
+import random  # Для случайного выбора эмодзи
 from dotenv import load_dotenv
-from telegram import Update, ReactionTypeEmoji  # 👈 Добавили ReactionTypeEmoji для реакций
+from telegram import Update, ReactionTypeEmoji  # ReactionTypeEmoji для реакций
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # 💾 ЗАГРУЗКА СКРЫТЫХ ПЕРЕМЕННЫХ (.env)
@@ -89,8 +89,8 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
         text_lower = update.message.text.lower()
         
-        # 😎 ХИТРАЯ ПАСХАЛКА НА СОЗДАТЕЛЯ (thisisfun)
-        if "thisisfun" in text_lower:
+        # 😎 ХИТРЫЕ ПАСХАЛКИ НА СОЗДАТЕЛЯ (thisisfun или @thisisfun404xd)
+        if "thisisfun" in text_lower or "@thisisfun404xd" in text_lower:
             reactions = ["🔥", "😎", "👑", "🚀", "⚡", "🏆", "👍", "❤️"]
             chosen_emoji = random.choice(reactions)
             try:
@@ -98,7 +98,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.set_reaction(reaction=ReactionTypeEmoji(emoji=chosen_emoji))
             except Exception as e:
                 print(f"❌ Ошибка реакции (возможно, отключены в чате): {e}")
-                # Если реакции заблокированы настройками группы — изящно отвечаем текстом
+                # Если реакции заблокированы настройками группы — отвечаем текстом
                 await update.message.reply_text(f"{chosen_emoji} Опа, создатель в здании! {chosen_emoji}")
             return  # Выходим, чтобы бот не триггерился на вызов справки ниже
             
