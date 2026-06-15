@@ -51,8 +51,8 @@ def load_usernames():
             with open(USERNAMES_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 username_to_id = {k: int(v) for k, v in data.items()}
-            except:
-                username_to_id = {}
+        except:
+            username_to_id = {}
 
 def save_usernames():
     try:
