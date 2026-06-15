@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-import random  # Для случайного выбора эмодзи
+import random  # Для случайного выбора эмодзи и рандомных цитат
 from dotenv import load_dotenv
 from telegram import Update, ReactionTypeEmoji  # ReactionTypeEmoji для реакций
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -15,20 +15,23 @@ BOT_TOKEN = os.getenv("MY_SECRET_TOKEN")
 # 📂 Настройка бессмертной папки для сохранения данных (требование хостинга)
 DATA_DIR = os.getenv('DATA_DIR', '/app/data')
 DATA_FILE = os.path.join(DATA_DIR, 'levels.json')
+QUOTES_FILE = os.path.join(DATA_DIR, 'quotes.json')  # Файл для истории сообщений
 
 username_to_id = {}
 user_levels = {}
 user_cars = {}  # Здесь хранятся кастомные тачки продюсеров
+chat_quotes = []  # База всех сообщений чата
 
 # 💾 СОВЕРШЕННАЯ ЛОГИКА СОХРАНЕНИЯ
 def load_data():
-    """Загрузка уровней и кастомных тачек из файла"""
-    global user_levels, user_cars
+    """Загрузка уровней, кастомных тачек и истории сообщений из файлов"""
+    global user_levels, user_cars, chat_quotes
+    
+    # 1. Загрузка уровней
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
                 if "levels" in data or "cars" in data:
                     levels = data.get("levels", {})
                     cars = data.get("cars", {})
@@ -37,17 +40,26 @@ def load_data():
                 else:
                     user_levels = {int(k): v for k, v in data.items()}
                     user_cars = {}
-                return
         except Exception as e:
-            print(f"❌ Ошибка загрузки данных: {e}")
-    
-    user_levels = {}
-    user_cars = {}
+            print(f"❌ Ошибка загрузки уровней: {e}")
+    else:
+        user_levels = {}
+        user_cars = {}
+
+    # 2. Загрузка истории сообщений
+    if os.path.exists(QUOTES_FILE):
+        try:
+            with open(QUOTES_FILE, "r", encoding="utf-8") as f:
+                chat_quotes = json.load(f)
+        except Exception as e:
+            print(f"❌ Ошибка загрузки истории: {e}")
+            chat_quotes = []
+    else:
+        chat_quotes = []
 
 def save_data():
-    """Сохранение всех данных в один файл"""
+    """Сохранение данных уровней in файл"""
     try:
-        # На всякий случай проверяем, создана ли папка /app/data
         os.makedirs(DATA_DIR, exist_ok=True)
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             combined_data = {
@@ -56,9 +68,18 @@ def save_data():
             }
             json.dump(combined_data, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        print(f"❌ Ошибка записи данных: {e}")
+        print(f"❌ Ошибка записи уровней: {e}")
 
-# Загружаем базу данных при старте
+def save_quotes():
+    """Сохранение истории сообщений в файл"""
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(QUOTES_FILE, "w", encoding="utf-8") as f:
+            json.dump(chat_quotes, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"❌ Ошибка записи истории: {e}")
+
+# Загружаем всю базу данных при старте
 load_data()
 
 # 🏎️ СПИСОК СТАНДАРТНЫХ ТАЧЕК ПО УРОВНЯМ
@@ -89,18 +110,29 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
         text_lower = update.message.text.lower()
         
+        # 📥 ЧИСТОЕ АВТО-СОХРАНЕНИЕ
+        # Не сохраняем команды (начинаются с /) И сообщения от любых ботов (user.is_bot)
+        is_msg_from_bot = user.is_bot if user else False
+        is_command = update.message.text.startswith('/')
+        
+        if not is_command and not is_msg_from_bot:
+            author_name = user.first_name if user else "Пользователь"
+            chat_quotes.append({
+                "author": author_name,
+                "text": update.message.text
+            })
+            save_quotes()  # Фиксируем в файл на хостинге
+        
         # 😎 ХИТРЫЕ ПАСХАЛКИ НА СОЗДАТЕЛЯ (thisisfun или @thisisfun404xd)
         if "thisisfun" in text_lower or "@thisisfun404xd" in text_lower:
             reactions = ["🔥", "😎", "👑", "🚀", "⚡", "🏆", "👍", "❤️"]
             chosen_emoji = random.choice(reactions)
             try:
-                # Ставим настоящую эмодзи-реакцию на сообщение юзера
                 await update.message.set_reaction(reaction=ReactionTypeEmoji(emoji=chosen_emoji))
             except Exception as e:
-                print(f"❌ Ошибка реакции (возможно, отключены в чате): {e}")
-                # Если реакции заблокированы настройками группы — отвечаем текстом
+                print(f"❌ Ошибка реакции: {e}")
                 await update.message.reply_text(f"{chosen_emoji} Опа, создатель в здании! {chosen_emoji}")
-            return  # Выходим, чтобы бот не триггерился на вызов справки ниже
+            return
             
         bot_user = await context.bot.get_me()
         bot_username = bot_user.username.lower()
@@ -118,7 +150,9 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/clean` (ответом) — зачистить все права чела до базового 5 lvl. 🧹\n\n"
                 "👥 *Для всех участников чата:*\n"
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
-                "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
+                "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
+                "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖\n\n"
+                "ℹ️ _Бот автоматически запоминает каждое чистое сообщение от людей в чате._"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -427,9 +461,33 @@ async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ==================== 💬 ВЫЗОВ СЛУЧАЙНОГО ВОСПОМИНАНИЯ ====================
+
+async def cite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /cite"""
+    try:
+        if not chat_quotes:
+            await update.message.reply_text("📋 История чата пока пуста! Напишите сначала несколько обычных сообщений.")
+            return
+            
+        # Берем рандомную запись из логов чата
+        random_quote = random.choice(chat_quotes)
+        
+        await update.message.reply_text(
+            f"💬 *Случайный флешбэк из архива чата:*\n\n"
+            f"«_{random_quote['text']}_»\n\n"
+            f"© *{random_quote['author']}*", 
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка вызова цитаты: `{e}`")
+
+# ==================== ЗАПУСК БОТА ====================
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Регистрация обработчиков
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_users))
     app.add_handler(CommandHandler("addprod", add_producer))
     app.add_handler(CommandHandler("delprod", delete_producer))
@@ -438,6 +496,9 @@ def main():
     app.add_handler(CommandHandler("setcar", set_car))
     app.add_handler(CommandHandler("clean", clean_user))
     app.add_handler(CommandHandler("my_level", my_level))
+    
+    # Команда рандома
+    app.add_handler(CommandHandler("cite", cite_command))
     
     print("🤖 Бот успешно запущен на стабильной конфигурации!")
     app.run_polling()
