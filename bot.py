@@ -1,8 +1,9 @@
 import asyncio
 import json
 import os
+import random  # 👈 Добавили для случайного выбора эмодзи
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, ReactionTypeEmoji  # 👈 Добавили ReactionTypeEmoji для реакций
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # 💾 ЗАГРУЗКА СКРЫТЫХ ПЕРЕМЕННЫХ (.env)
@@ -77,7 +78,7 @@ CAR_RANKS = {
     17: "Ламборгини",
     18: "Майбах",
     19: "Бугатти Широн",
-    20: "Роллс-Ройс Фантом"
+    20: "Роллс-Royce Фантом"
 }
 
 async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,10 +87,25 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username_to_id[user.username.lower()] = user.id
     
     if update.message and update.message.text:
+        text_lower = update.message.text.lower()
+        
+        # 😎 ХИТРАЯ ПАСХАЛКА НА СОЗДАТЕЛЯ (thisisfun)
+        if "thisisfun" in text_lower:
+            reactions = ["🔥", "😎", "👑", "🚀", "⚡", "🏆", "👍", "❤️"]
+            chosen_emoji = random.choice(reactions)
+            try:
+                # Ставим настоящую эмодзи-реакцию на сообщение юзера
+                await update.message.set_reaction(reaction=ReactionTypeEmoji(emoji=chosen_emoji))
+            except Exception as e:
+                print(f"❌ Ошибка реакции (возможно, отключены в чате): {e}")
+                # Если реакции заблокированы настройками группы — изящно отвечаем текстом
+                await update.message.reply_text(f"{chosen_emoji} Опа, создатель в здании! {chosen_emoji}")
+            return  # Выходим, чтобы бот не триггерился на вызов справки ниже
+            
         bot_user = await context.bot.get_me()
         bot_username = bot_user.username.lower()
         
-        if f"@{bot_username}" in update.message.text.lower():
+        if f"@{bot_username}" in text_lower:
             help_text = (
                 "📋 *СПРАВКА ПО КОМАНДАМ БОТА*\n\n"
                 "👑 *Только для Создателя чата:*\n"
@@ -396,7 +412,7 @@ async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id in user_cars:
-        car_info = f"\n🏎 convert Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
+        car_info = f"\n🏎 Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
         level_info = "Админ-статус"
     else:
         level = user_levels.get(user_id, 1)
