@@ -9,33 +9,52 @@ BOT_TOKEN = "8534700798:AAF2EJMfjpDEv5Y0fCyJIBqC33PPLb86mM0"
 DATA_FILE = "levels.json"
 
 username_to_id = {}
+user_levels = {}
+user_cars = {}  # Здесь хранятся кастомные тачки продюсеров
 
-# 💾 ЛОГИКА РАБОТЫ С ФАЙЛОМ СОХРАНЕНИЙ
-def load_levels():
-    """Загрузка уровней из файла при старте бота"""
+# 💾 СОВЕРШЕННАЯ ЛОГИКА СХРАНЕНИЯ (С ПОДДЕРЖКОЙ КАСТОМНЫХ ТАЧЕК)
+def load_data():
+    """Загрузка уровней и кастомных тачек из файла"""
+    global user_levels, user_cars
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # JSON превращает ID (числа) в строки, возвращаем их обратно в int
-                return {int(k): v for k, v in data.items()}
+                
+                # Проверяем структуру файла (новая комбинированная или старая плоская)
+                if "levels" in data or "cars" in data:
+                    levels = data.get("levels", {})
+                    cars = data.get("cars", {})
+                    user_levels = {int(k): v for k, v in levels.items()}
+                    user_cars = {int(k): v for k, v in cars.items()}
+                else:
+                    # Старый формат: файл содержал только уровни
+                    user_levels = {int(k): v for k, v in data.items()}
+                    user_cars = {}
+                return
         except Exception as e:
-            print(f"❌ Ошибка загрузки файла уровней: {e}")
-            return {}
-    return {}
+            print(f"❌ Ошибка загрузки данных: {e}")
+    
+    # Если файла нет, оставляем пустыми
+    user_levels = {}
+    user_cars = {}
 
-def save_levels():
-    """Сохранение текущих уровней в файл"""
+def save_data():
+    """Сохранение всех данных в один файл"""
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(user_levels, f, ensure_ascii=False, indent=4)
+            combined_data = {
+                "levels": user_levels,
+                "cars": user_cars
+            }
+            json.dump(combined_data, f, ensure_ascii=False, indent=4)
     except Exception as e:
-        print(f"❌ Ошибка записи в файл уровней: {e}")
+        print(f"❌ Ошибка записи данных: {e}")
 
-# Загружаем базу данных прямо при запуске скрипта
-user_levels = load_levels()
+# Загружаем базу данных при старте
+load_data()
 
-# 🏎️ СПИСОК ТАЧЕК ПО УРОВНЯМ
+# 🏎️ СПИСОК СТАНДАРТНЫХ ТАЧЕК ПО УРОВНЯМ
 CAR_RANKS = {
     5: "Чепырка (ВАЗ-2114)",
     6: "Приора",
@@ -73,6 +92,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🎬 *Для Продюсеров и Создателя:*\n"
                 "• `/setlvl [5-20]` (ответом, по @username или ID) — выдать уровень и тачку. 🏎️\n"
                 "• `/setname [Имя]` — изменить своё продюсерское имя в теге. 💎\n"
+                "• `/setcar [Название]` — поставить себе ЛЮБУЮ кастомную тачку! 🚀\n"
                 "• `/clean` (ответом) — зачистить все права чела до базового 5 lvl. 🧹\n\n"
                 "👥 *Для всех участников чата:*\n"
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
@@ -173,7 +193,10 @@ async def delete_producer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_user.id, custom_title="5 lvl"
         )
         user_levels[target_user.id] = 5
-        save_levels()  # Запись в файл
+        # Удаляем кастомную тачку, если она была
+        if target_user.id in user_cars:
+            del user_cars[target_user.id]
+        save_data()
             
         await context.bot.send_message(
             chat_id=chat_id,
@@ -258,7 +281,7 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         title = f"{level} lvl"
         user_levels[target_user_id] = level
-        save_levels()  # Запись в файл
+        save_data()
         
         car_name = CAR_RANKS.get(level, "Неизвестное авто")
         
@@ -282,7 +305,38 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Не удалось выдать уровень: `{e}`", parse_mode="Markdown")
 
 # ========================================================
-# 4. КОМАНДА /clean 
+# 4. КОМАНДА /setcar (КАСТОМНАЯ ТАЧКА ДЛЯ АДМИНОВ)
+# ========================================================
+async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        user_status = await get_user_status(chat_id, user.id, context)
+        if user_status not in ["owner", "producer"]:
+            await update.message.reply_text("❌ Эта команда доступна только Продюсерам и Создателю чата, бро!")
+            return
+            
+        if not context.args:
+            await update.message.reply_text("❌ Напиши название транспорта после команды, например: `/setcar Межгалактический Крейсер`")
+            return
+            
+        custom_car = " ".join(context.args)
+        user_cars[user.id] = custom_car
+        save_data()
+            
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🚀 Продюсер *{user.first_name}* обновил свой личный транспорт!\nТеперь твой аппарат: *{custom_car}* 🔥",
+            parse_mode="Markdown"
+        )
+        try: await update.message.delete()
+        except: pass
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка установки кастомной тачки: `{e}`", parse_mode="Markdown")
+
+# ========================================================
+# 5. КОМАНДА /clean 
 # ========================================================
 async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -316,7 +370,9 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, user_id=target_user.id, custom_title="5 lvl"
         )
         user_levels[target_user.id] = 5
-        save_levels()  # Запись в файл
+        if target_user.id in user_cars:
+            del user_cars[target_user.id]
+        save_data()
             
         await context.bot.send_message(
             chat_id=chat_id,
@@ -361,15 +417,22 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def my_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    level = user_levels.get(user_id, 1)
     
-    if level in CAR_RANKS:
-        car_info = f"\n🏎️ Твоя тачка в гараже: *{CAR_RANKS[level]}*"
+    # 🏎️ Проверяем, есть ли у пользователя кастомная тачка
+    if user_id in user_cars:
+        car_info = f"\n🏎️ Личный транспорт Продюсера: *{user_cars[user_id]}* 🔥"
+        level_info = "Админ-статус"
     else:
-        car_info = f"\n🚲 Пока гоняешь на велике, копи на Чепырку (нужен 5 lvl!)"
+        # Если кастомной нет, берем стандартный левел
+        level = user_levels.get(user_id, 1)
+        level_info = f"{level} lvl"
+        if level in CAR_RANKS:
+            car_info = f"\n🏎️ Твоя тачка в гараже: *{CAR_RANKS[level]}*"
+        else:
+            car_info = f"\n🚲 Пока гоняешь на велике, копи на Чепырку (нужен 5 lvl!)"
 
     await update.message.reply_text(
-        f"📊 Твой текущий уровень: *{level} lvl*{car_info}", 
+        f"📊 Твой текущий статус: *{level_info}*{car_info}", 
         parse_mode="Markdown"
     )
 
@@ -381,6 +444,7 @@ def main():
     app.add_handler(CommandHandler("delprod", delete_producer))
     app.add_handler(CommandHandler("setlvl", set_level))
     app.add_handler(CommandHandler("setname", set_name))
+    app.add_handler(CommandHandler("setcar", set_car))
     app.add_handler(CommandHandler("clean", clean_user))
     app.add_handler(CommandHandler("my_level", my_level))
     
