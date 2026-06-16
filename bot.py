@@ -157,7 +157,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖\n\n"
-                "ℹ️ _Бот автоматически запоминает каждое чистое сообщение от людей в чате._"
+                ""
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
 
