@@ -156,8 +156,8 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "👥 *Для всех участников чата:*\n"
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
+                "• `/mix` — скрестить две случайные фразы из архива в шизо-комбо! 🔀\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
-            
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -176,7 +176,7 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
         pass
     return "regular"
 
-# 🤫 СЕКРЕТНАЯ КОМАНДА ДЛЯ ДИРЕКТОРА (БУЛАТА)
+# 🤫 СЕКРЕТНАЯ КОМАНДА ДЛИ ДИРЕКТОРА (БУЛАТА)
 async def set_bulat_director(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -312,7 +312,7 @@ async def set_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_id = update.effective_user.id
         
         sender_status = await get_user_status(chat_id, sender_id, context)
-        if sender_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+        if sender_status not in ["owner", "producer", "director"]:
             await update.message.reply_text("❌ Менять уровни могут только Продюсеры, Директор или Создатель чата.")
             return
 
@@ -403,7 +403,7 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
         user_status = await get_user_status(chat_id, user.id, context)
-        if user_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+        if user_status not in ["owner", "producer", "director"]:
             await update.message.reply_text("❌ Эта команда доступна только Продюсерам, Директору и Создателю чата, бро!")
             return
             
@@ -417,7 +417,7 @@ async def set_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🚀 *{user.first_name}* обновил свой личный transport!\nТеперь твой аппарат: *{custom_car}* 🔥",
+            text=f"🚀 *{user.first_name}* обновил свой личный транспорт!\nТеперь твой аппарат: *{custom_car}* 🔥",
             parse_mode="Markdown"
         )
         try: await update.message.delete()
@@ -431,7 +431,7 @@ async def clean_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_id = update.effective_user.id
         
         sender_status = await get_user_status(chat_id, sender_id, context)
-        if sender_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+        if sender_status not in ["owner", "producer", "director"]:
             await update.message.reply_text("❌ Ошибка! Чистить права могут только Продюсеры, Директор или Создатель чата.")
             return
             
@@ -478,7 +478,7 @@ async def set_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
         user_status = await get_user_status(chat_id, user.id, context)
-        if user_status not in ["owner", "producer", "director"]:  # 👈 Добавлен director
+        if user_status not in ["owner", "producer", "director"]:
             await update.message.reply_text("❌ Эта команда доступна только Продюсерам и Директору чата, бро!")
             return
             
@@ -546,6 +546,40 @@ async def cite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка вызова цитаты: `{e}`")
 
+# ==================== 🔀 ГЕНЕРАТОР ШИЗО-КОМБО ====================
+
+async def mix_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /mix — скрещивает случайные фразы из истории чата"""
+    try:
+        if len(chat_quotes) < 2:
+            await update.message.reply_text("🧪 Для создания микса нужно хотя бы 2 сообщения в истории чата! Напишите ещё что-нибудь.")
+            return
+
+        # Выбираем 2 случайных сообщения из базы
+        quote_a, quote_b = random.sample(chat_quotes, 2)
+
+        words_a = quote_a["text"].split()
+        words_b = quote_b["text"].split()
+
+        # Берем первую половину первой фразы и вторую половину второй
+        half_a = words_a[:max(1, len(words_a) // 2)]
+        half_b = words_b[len(words_b) // 2:]
+
+        mixed_text = " ".join(half_a + half_b)
+
+        author_a = quote_a["author"]
+        author_b = quote_b["author"]
+        authors_str = f"{author_a} × {author_b}" if author_a != author_b else author_a
+
+        await update.message.reply_text(
+            f"🔀 *Шизо-комбо из архива:*\n\n"
+            f"«_{mixed_text}_»\n\n"
+            f"🧪 *Скрестили:* {authors_str}",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка генерации микса: `{e}`", parse_mode="Markdown")
+
 # ==================== ЗАПУСК БОТА ====================
 
 def main():
@@ -561,6 +595,7 @@ def main():
     app.add_handler(CommandHandler("clean", clean_user))
     app.add_handler(CommandHandler("my_level", my_level))
     app.add_handler(CommandHandler("cite", cite_command))
+    app.add_handler(CommandHandler("mix", mix_command))
     
     # 🤫 СЕКРЕТНЫЕ ХЕНДЛЕРЫ
     app.add_handler(CommandHandler("setbulat", set_bulat_director))
