@@ -1,4 +1,4 @@
-ъimport asyncio
+import asyncio
 import json
 import os
 import random  # Для случайного выбора эмодзи и рандомных цитат
