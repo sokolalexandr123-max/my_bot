@@ -1,4 +1,4 @@
-import asyncio
+ъimport asyncio
 import json
 import os
 import random  # Для случайного выбора эмодзи и рандомных цитат
@@ -157,7 +157,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
                 "• `/mix` — скрестить две случайные фразы из архива в микс! 🔀\n"
-                "• `/kasha` — заварить сумасшедшую кашу из 3 фраз чата! 🥣\n"
+                "• `/kasha` — цепная склейка 3 фраз по совпадающим буквам! 🥣\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -581,44 +581,62 @@ async def mix_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка генерации микса: `{e}`", parse_mode="Markdown")
 
-# ==================== 🥣 ГЕНЕРАТОР КАШИ (ТРЕХСЛОЙНЫЙ МИКС) ====================
+# ==================== 🔗 Вспомогательная функция стыковки ====================
+
+def join_by_letter_bridge(text_a: str, text_b: str) -> str:
+    """Ищет слово в text_a, чья последняя буква совпадает с первой буквой слова в text_b"""
+    words_a = text_a.split()
+    words_b = text_b.split()
+    
+    for i, w1 in enumerate(words_a):
+        # Очищаем слово от знаков препинания для точного поиска буквы
+        clean_w1 = "".join(filter(str.isalnum, w1)).lower()
+        if not clean_w1:
+            continue
+        last_char = clean_w1[-1]
+        
+        for j, w2 in enumerate(words_b):
+            clean_w2 = "".join(filter(str.isalnum, w2)).lower()
+            if not clean_w2:
+                continue
+            first_char = clean_w2[0]
+            
+            # 🔥 Нашли совпадение на стыке!
+            if last_char == first_char:
+                part_a = words_a[:i+1]
+                part_b = words_b[j:]
+                return " ".join(part_a + part_b)
+                
+    # Страховка: если общих букв не нашлось, режем пополам
+    mid_a = max(1, len(words_a) // 2)
+    mid_b = max(0, len(words_b) // 2)
+    return " ".join(words_a[:mid_a] + words_b[mid_b:])
+
+# ==================== 🥣 ГЕНЕРАТОР КАШИ (ЦЕПНАЯ СКЛЕЙКА) ====================
 
 async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /kasha — скрещивает сразу 3 разных сообщения в абсурдную кашу"""
+    """Команда /kasha — цепная склейка 3 фраз по совпадающим буквам"""
     try:
         if len(chat_quotes) < 3:
-            await update.message.reply_text("🥣 Чтобы заварить кашу, нужно хотя бы 3 сообщения в истории чата! Напишите ещё фраз.")
+            await update.message.reply_text("🥣 Чтобы заварить кашу, нужно хотя бы 3 сообщения в истории чата!")
             return
 
-        # Берем 3 случайных сообщения из истории
+        # Берем 3 случайных сообщения
         q1, q2, q3 = random.sample(chat_quotes, 3)
 
-        w1 = q1["text"].split()
-        w2 = q2["text"].split()
-        w3 = q3["text"].split()
+        # 1. Состыковываем 1-е и 2-е сообщения
+        step1 = join_by_letter_bridge(q1["text"], q2["text"])
+        
+        # 2. Состыковываем результат с 3-им сообщением
+        final_kasha = join_by_letter_bridge(step1, q3["text"])
 
-        # 1. Берем начало первой фразы
-        part1 = w1[:max(1, len(w1) // 3)]
-
-        # 2. Берем серединку второй фразы
-        start_2 = len(w2) // 3
-        end_2 = max(start_2 + 1, (len(w2) * 2) // 3)
-        part2 = w2[start_2:end_2]
-
-        # 3. Берем конец третьей фразы
-        start_3 = max(0, (len(w3) * 2) // 3)
-        part3 = w3[start_3:]
-
-        # Собираем всё в одну кучу
-        kasha_text = " ".join(part1 + part2 + part3)
-
-        # Собираем уникальный список авторов
+        # Собираем список авторов
         authors = list(dict.fromkeys([q1["author"], q2["author"], q3["author"]]))
         authors_str = " + ".join(authors)
 
         await update.message.reply_text(
-            f"🥣 *Наварили бредовой каши из чата:*\n\n"
-            f"«_{kasha_text}_»\n\n"
+            f"🥣 *Цепная каша (склейка по буквам):*\n\n"
+            f"«_{final_kasha}_»\n\n"
             f"👨‍🍳 *Поварята:* {authors_str}",
             parse_mode="Markdown"
         )
