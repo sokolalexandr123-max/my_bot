@@ -156,7 +156,8 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "👥 *Для всех участников чата:*\n"
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать абсолютно рандомное сообщение из истории чата! 💬\n"
-                "• `/mix` — скрестить две случайные фразы из архива в шизо-комбо! 🔀\n"
+                "• `/mix` — скрестить две случайные фразы из архива в микс! 🔀\n"
+                "• `/kasha` — заварить сумасшедшую кашу из 3 фраз чата! 🥣\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -176,7 +177,7 @@ async def get_user_status(chat_id, user_id, context: ContextTypes.DEFAULT_TYPE):
         pass
     return "regular"
 
-# 🤫 СЕКРЕТНАЯ КОМАНДА ДЛИ ДИРЕКТОРА (БУЛАТА)
+# 🤫 СЕКРЕТНАЯ КОМАНДА ДЛЯ ДИРЕКТОРА (БУЛАТА)
 async def set_bulat_director(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -549,7 +550,7 @@ async def cite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== 🔀 ГЕНЕРАТОР ШИЗО-КОМБО ====================
 
 async def mix_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /mix — скрещивает случайные фразы из истории чата"""
+    """Команда /mix — скрещивает 2 случайные фразы из истории чата"""
     try:
         if len(chat_quotes) < 2:
             await update.message.reply_text("🧪 Для создания микса нужно хотя бы 2 сообщения в истории чата! Напишите ещё что-нибудь.")
@@ -580,6 +581,50 @@ async def mix_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Ошибка генерации микса: `{e}`", parse_mode="Markdown")
 
+# ==================== 🥣 ГЕНЕРАТОР КАШИ (ТРЕХСЛОЙНЫЙ МИКС) ====================
+
+async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /kasha — скрещивает сразу 3 разных сообщения в абсурдную кашу"""
+    try:
+        if len(chat_quotes) < 3:
+            await update.message.reply_text("🥣 Чтобы заварить кашу, нужно хотя бы 3 сообщения в истории чата! Напишите ещё фраз.")
+            return
+
+        # Берем 3 случайных сообщения из истории
+        q1, q2, q3 = random.sample(chat_quotes, 3)
+
+        w1 = q1["text"].split()
+        w2 = q2["text"].split()
+        w3 = q3["text"].split()
+
+        # 1. Берем начало первой фразы
+        part1 = w1[:max(1, len(w1) // 3)]
+
+        # 2. Берем серединку второй фразы
+        start_2 = len(w2) // 3
+        end_2 = max(start_2 + 1, (len(w2) * 2) // 3)
+        part2 = w2[start_2:end_2]
+
+        # 3. Берем конец третьей фразы
+        start_3 = max(0, (len(w3) * 2) // 3)
+        part3 = w3[start_3:]
+
+        # Собираем всё в одну кучу
+        kasha_text = " ".join(part1 + part2 + part3)
+
+        # Собираем уникальный список авторов
+        authors = list(dict.fromkeys([q1["author"], q2["author"], q3["author"]]))
+        authors_str = " + ".join(authors)
+
+        await update.message.reply_text(
+            f"🥣 *Наварили бредовой каши из чата:*\n\n"
+            f"«_{kasha_text}_»\n\n"
+            f"👨‍🍳 *Поварята:* {authors_str}",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка при варке каши: `{e}`", parse_mode="Markdown")
+
 # ==================== ЗАПУСК БОТА ====================
 
 def main():
@@ -596,6 +641,7 @@ def main():
     app.add_handler(CommandHandler("my_level", my_level))
     app.add_handler(CommandHandler("cite", cite_command))
     app.add_handler(CommandHandler("mix", mix_command))
+    app.add_handler(CommandHandler("kasha", kasha_command))
     
     # 🤫 СЕКРЕТНЫЕ ХЕНДЛЕРЫ
     app.add_handler(CommandHandler("setbulat", set_bulat_director))
