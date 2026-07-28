@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+from collections import defaultdict
 from dotenv import load_dotenv
 from telegram import Update, ReactionTypeEmoji
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -19,16 +20,10 @@ QUOTES_FILE = os.path.join(DATA_DIR, 'quotes.json')
 
 username_to_id = {}
 user_levels = {}
-user_cars = {}      # Кастомные тачки продюсеров
-user_roles = {}     # Скрытые роли (например, {ID: "director"})
-chat_quotes = []    # База всех сообщений чата
-active_chats = set() # Список ID активных чатов для авто-вбросов
-
-# Разговорные связки для склейки, если буквы не совпали
-CONNECTORS = [
-    ", а потом ", ", кстати, ", " ... ", " и вообще ", 
-    ", короче, ", " но ", ", хотя ", " ну и "
-]
+user_cars = {}        # Кастомные тачки продюсеров
+user_roles = {}       # Скрытые роли (например, {ID: "director"})
+chat_quotes = []      # База всех сообщений чата
+active_chats = set()   # Список ID активных чатов для авто-вбросов
 
 # 💾 СОВЕРШЕННАЯ ЛОГИКА СОХРАНЕНИЯ И ЗАГРУЗКИ
 def load_data():
@@ -115,73 +110,65 @@ CAR_RANKS = {
     20: "Роллс-Royce Фантом"
 }
 
-# ==================== 🔗 УМНЫЙ МОСТИК СКЛЕЙКИ ====================
+# ==================== 🥣 ГЕНЕРАТОР КАШИ В СТИЛЕ СГЛЫПЫ (ЦЕПИ МАРКОВА) ====================
 
-def join_by_letter_bridge(text_a: str, text_b: str) -> str:
-    """Ищет такой стык фраз, который сохраняет МАКСИМУМ текста.
-    Если красивого буквенного совпадения нет — сцепляет через мягкую связку."""
-    words_a = text_a.split()
-    words_b = text_b.split()
-    
-    if not words_a: return text_b
-    if not words_b: return text_a
-
-    best_pair = None
-    best_score = -1
-
-    # Перебираем варианты и считаем, сколько слов останется от A и B
-    for i in range(len(words_a)):
-        clean_w1 = "".join(filter(str.isalnum, words_a[i])).lower()
-        if not clean_w1:
-            continue
-        last_char = clean_w1[-1]
-
-        for j in range(len(words_b)):
-            clean_w2 = "".join(filter(str.isalnum, words_b[j])).lower()
-            if not clean_w2:
-                continue
-            first_char = clean_w2[0]
-
-            if last_char == first_char:
-                # Чем позже i в первой фразе и чем раньше j во второй — тем длиннее итоговый текст
-                score = (i + 1) + (len(words_b) - j)
-                if score > best_score:
-                    best_score = score
-                    best_pair = (i, j)
-
-    # Если нашли совпадение по последней/первой букве
-    if best_pair:
-        i, j = best_pair
-        return " ".join(words_a[:i+1] + words_b[j:])
-
-    # Если буквенного стыка нет — аккуратно соединяем через случайный союз
-    conn = random.choice(CONNECTORS)
-    return text_a + conn + text_b
-
-def generate_raw_kasha() -> str:
-    """Генерирует гибридный текст из 3-10 случайных фраз без потери объёма"""
+def generate_sglypa_markov_kasha(start_word: str = "каша", min_words: int = 8, max_words: int = 25) -> str:
+    """Генерирует абсурдный поток сознания из реальных фраз пользователей (Цепи Маркова)"""
     if len(chat_quotes) < 3:
         return ""
 
-    max_count = min(10, len(chat_quotes))
-    count = random.randint(3, max_count)
-    selected_quotes = random.sample(chat_quotes, count)
+    # 1. Строим граф переходов слов из всей базы историй
+    chain = defaultdict(list)
+    for q in chat_quotes:
+        words = q["text"].split()
+        for i in range(len(words) - 1):
+            curr_w = words[i]
+            next_w = words[i + 1]
+            clean_curr = curr_w.lower().strip(".,!?\"'()")
+            if clean_curr:
+                chain[clean_curr].append(next_w)
 
-    result = selected_quotes[0]["text"]
-    for q in selected_quotes[1:]:
-        result = join_by_letter_bridge(result, q["text"])
+    if not chain:
+        return ""
 
-    return result
+    # 2. Ищем стартовое слово ("каша" или любое случайное слово из базы)
+    start_key = start_word.lower().strip(".,!?\"'()")
+    if start_key not in chain:
+        start_key = random.choice(list(chain.keys()))
+
+    current_key = start_key
+    result = [current_key]
+    target_length = random.randint(min_words, max_words)
+
+    # 3. Нанизываем цепочку слов
+    for _ in range(target_length - 1):
+        if current_key in chain and chain[current_key]:
+            next_word = random.choice(chain[current_key])
+            result.append(next_word)
+            current_key = next_word.lower().strip(".,!?\"'()")
+        else:
+            # При тупике прыгаем на случайный узел
+            current_key = random.choice(list(chain.keys()))
+            result.append("...")
+            result.append(current_key)
+
+    res_text = " ".join(result)
+
+    # 4. Фирменный стиль Сглыпы: капс с вероятностью 35%
+    if random.random() < 0.35:
+        res_text = res_text.upper()
+
+    return res_text
 
 # ==================== ⏰ ФОНОВЫЙ АВТО-ВБРОС ====================
 
 async def auto_kasha_loop(app: Application):
-    """Фоновый поток: раз в 8-14 часов присылает чистый текст мема в активные чаты"""
+    """Фоновый поток: раз в 8-14 часов присылает бредовую кашу Сглыпы в активные чаты"""
     while True:
         wait_seconds = random.randint(8 * 3600, 14 * 3600)
         await asyncio.sleep(wait_seconds)
 
-        raw_text = generate_raw_kasha()
+        raw_text = generate_sglypa_markov_kasha(start_word="каша")
         if not raw_text:
             continue
 
@@ -211,6 +198,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_msg_from_bot = user.is_bot if user else False
         is_command = update.message.text.startswith('/')
         
+        # Сохраняем все человеческие сообщения для обучении Маркова
         if not is_command and not is_msg_from_bot:
             author_name = user.first_name if user else "Пользователь"
             chat_quotes.append({
@@ -219,6 +207,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
             save_quotes()
         
+        # Пасхалка на создателя
         if "thisisfun" in text_lower or "@thisisfun404xd" in text_lower:
             reactions = ["🔥", "😎", "👑", "🚀", "⚡", "🏆", "👍", "❤️"]
             chosen_emoji = random.choice(reactions)
@@ -232,6 +221,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_user = await context.bot.get_me()
         bot_username = bot_user.username.lower()
         
+        # Вызов справки по тегу бота
         if f"@{bot_username}" in text_lower:
             help_text = (
                 "📋 *СПРАВКА ПО КОМАНДАМ БОТА*\n\n"
@@ -247,7 +237,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать случайное сообщение из истории! 💬\n"
                 "• `/mix` — скрестить две случайные фразы! 🔀\n"
-                "• `/kasha` — цепная склейка от 3 до 10 фраз! 🥣\n"
+                "• `/kasha` — генератор Сглыпо-каши из истории чата! 🥣\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -665,21 +655,14 @@ async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🥣 Чтобы заварить кашу, нужно хотя бы 3 сообщения в истории!")
             return
 
-        max_count = min(10, len(chat_quotes))
-        count = random.randint(3, max_count)
-        selected_quotes = random.sample(chat_quotes, count)
-
-        final_kasha = selected_quotes[0]["text"]
-        for q in selected_quotes[1:]:
-            final_kasha = join_by_letter_bridge(final_kasha, q["text"])
-
-        authors = list(dict.fromkeys([q["author"] for q in selected_quotes]))
-        authors_str = " + ".join(authors)
+        kasha_text = generate_sglypa_markov_kasha(start_word="каша")
+        if not kasha_text:
+            await update.message.reply_text("🥣 Сглыпа ещё не придумал, из чего сварить кашу...")
+            return
 
         await update.message.reply_text(
-            f"🥣 *Цепная каша из {count} фраз:*\n\n"
-            f"«_{final_kasha}_»\n\n"
-            f"👨‍🍳 *Поварята:* {authors_str}",
+            f"🥣 *Сглыпа сварил кашу из истории чата:*\n\n"
+            f"«_{kasha_text}_»",
             parse_mode="Markdown"
         )
     except Exception as e:
@@ -704,7 +687,7 @@ def main():
     
     app.add_handler(CommandHandler("setbulat", set_bulat_director))
     
-    print("🤖 Бот запущен! Обновленная 'Умная каша' активирована.")
+    print("🤖 Бот запущен! Сглыпо-каша на цепях Маркова готова.")
     app.run_polling()
 
 if __name__ == "__main__":
