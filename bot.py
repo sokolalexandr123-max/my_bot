@@ -237,7 +237,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать случайное сообщение из истории! 💬\n"
                 "• `/mix` — скрестить две случайные фразы! 🔀\n"
-                "• `/kasha` — генератор Сглыпо-каши из истории чата! 🥣\n"
+                "• `/kasha` — генератор каши из истории чата! 🥣\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -661,7 +661,6 @@ async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await update.message.reply_text(
-            f"🥣 *Сглыпа сварил кашу из истории чата:*\n\n"
             f"«_{kasha_text}_»",
             parse_mode="Markdown"
         )
