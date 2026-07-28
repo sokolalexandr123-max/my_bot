@@ -24,6 +24,12 @@ user_roles = {}     # Скрытые роли (например, {ID: "director"
 chat_quotes = []    # База всех сообщений чата
 active_chats = set() # Список ID активных чатов для авто-вбросов
 
+# Разговорные связки для склейки, если буквы не совпали
+CONNECTORS = [
+    ", а потом ", ", кстати, ", " ... ", " и вообще ", 
+    ", короче, ", " но ", ", хотя ", " ну и "
+]
+
 # 💾 СОВЕРШЕННАЯ ЛОГИКА СОХРАНЕНИЯ И ЗАГРУЗКИ
 def load_data():
     """Загрузка уровней, кастомных тачек, ролей и истории из файлов"""
@@ -109,36 +115,51 @@ CAR_RANKS = {
     20: "Роллс-Royce Фантом"
 }
 
-# ==================== 🔗 ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ СКЛЕЙКИ ====================
+# ==================== 🔗 УМНЫЙ МОСТИК СКЛЕЙКИ ====================
 
 def join_by_letter_bridge(text_a: str, text_b: str) -> str:
-    """Ищет слово в text_a, чья последняя буква совпадает с первой буквой слова в text_b"""
+    """Ищет такой стык фраз, который сохраняет МАКСИМУМ текста.
+    Если красивого буквенного совпадения нет — сцепляет через мягкую связку."""
     words_a = text_a.split()
     words_b = text_b.split()
     
-    for i, w1 in enumerate(words_a):
-        clean_w1 = "".join(filter(str.isalnum, w1)).lower()
+    if not words_a: return text_b
+    if not words_b: return text_a
+
+    best_pair = None
+    best_score = -1
+
+    # Перебираем варианты и считаем, сколько слов останется от A и B
+    for i in range(len(words_a)):
+        clean_w1 = "".join(filter(str.isalnum, words_a[i])).lower()
         if not clean_w1:
             continue
         last_char = clean_w1[-1]
-        
-        for j, w2 in enumerate(words_b):
-            clean_w2 = "".join(filter(str.isalnum, w2)).lower()
+
+        for j in range(len(words_b)):
+            clean_w2 = "".join(filter(str.isalnum, words_b[j])).lower()
             if not clean_w2:
                 continue
             first_char = clean_w2[0]
-            
+
             if last_char == first_char:
-                part_a = words_a[:i+1]
-                part_b = words_b[j:]
-                return " ".join(part_a + part_b)
-                
-    mid_a = max(1, len(words_a) // 2)
-    mid_b = max(0, len(words_b) // 2)
-    return " ".join(words_a[:mid_a] + words_b[mid_b:])
+                # Чем позже i в первой фразе и чем раньше j во второй — тем длиннее итоговый текст
+                score = (i + 1) + (len(words_b) - j)
+                if score > best_score:
+                    best_score = score
+                    best_pair = (i, j)
+
+    # Если нашли совпадение по последней/первой букве
+    if best_pair:
+        i, j = best_pair
+        return " ".join(words_a[:i+1] + words_b[j:])
+
+    # Если буквенного стыка нет — аккуратно соединяем через случайный союз
+    conn = random.choice(CONNECTORS)
+    return text_a + conn + text_b
 
 def generate_raw_kasha() -> str:
-    """Генерирует чистый гибридный текст из 3-10 случайных фраз"""
+    """Генерирует гибридный текст из 3-10 случайных фраз без потери объёма"""
     if len(chat_quotes) < 3:
         return ""
 
@@ -683,7 +704,7 @@ def main():
     
     app.add_handler(CommandHandler("setbulat", set_bulat_director))
     
-    print("🤖 Бот запущен! Динамическая каша (3-10 фраз) активирована.")
+    print("🤖 Бот запущен! Обновленная 'Умная каша' активирована.")
     app.run_polling()
 
 if __name__ == "__main__":
