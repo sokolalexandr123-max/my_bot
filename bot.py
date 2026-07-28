@@ -138,20 +138,25 @@ def join_by_letter_bridge(text_a: str, text_b: str) -> str:
     return " ".join(words_a[:mid_a] + words_b[mid_b:])
 
 def generate_raw_kasha() -> str:
-    """Генерирует чистый гибридный текст без заголовков и авторов"""
+    """Генерирует чистый гибридный текст из 3-10 случайных фраз"""
     if len(chat_quotes) < 3:
         return ""
 
-    q1, q2, q3 = random.sample(chat_quotes, 3)
-    step1 = join_by_letter_bridge(q1["text"], q2["text"])
-    return join_by_letter_bridge(step1, q3["text"])
+    max_count = min(10, len(chat_quotes))
+    count = random.randint(3, max_count)
+    selected_quotes = random.sample(chat_quotes, count)
+
+    result = selected_quotes[0]["text"]
+    for q in selected_quotes[1:]:
+        result = join_by_letter_bridge(result, q["text"])
+
+    return result
 
 # ==================== ⏰ ФОНОВЫЙ АВТО-ВБРОС ====================
 
 async def auto_kasha_loop(app: Application):
     """Фоновый поток: раз в 8-14 часов присылает чистый текст мема в активные чаты"""
     while True:
-        # Пауза от 8 до 14 часов (в секундах)
         wait_seconds = random.randint(8 * 3600, 14 * 3600)
         await asyncio.sleep(wait_seconds)
 
@@ -221,7 +226,7 @@ async def track_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• `/my_level` — узнать свой уровень и тачку! 📊\n"
                 "• `/cite` — выдать случайное сообщение из истории! 💬\n"
                 "• `/mix` — скрестить две случайные фразы! 🔀\n"
-                "• `/kasha` — цепная склейка 3 фраз по буквам! 🥣\n"
+                "• `/kasha` — цепная склейка от 3 до 10 фраз! 🥣\n"
                 "• Просто тегни меня (`@`), чтобы вызвать это меню! 🤖"
             )
             await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -639,16 +644,19 @@ async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🥣 Чтобы заварить кашу, нужно хотя бы 3 сообщения в истории!")
             return
 
-        q1, q2, q3 = random.sample(chat_quotes, 3)
+        max_count = min(10, len(chat_quotes))
+        count = random.randint(3, max_count)
+        selected_quotes = random.sample(chat_quotes, count)
 
-        step1 = join_by_letter_bridge(q1["text"], q2["text"])
-        final_kasha = join_by_letter_bridge(step1, q3["text"])
+        final_kasha = selected_quotes[0]["text"]
+        for q in selected_quotes[1:]:
+            final_kasha = join_by_letter_bridge(final_kasha, q["text"])
 
-        authors = list(dict.fromkeys([q1["author"], q2["author"], q3["author"]]))
+        authors = list(dict.fromkeys([q["author"] for q in selected_quotes]))
         authors_str = " + ".join(authors)
 
         await update.message.reply_text(
-            f"🥣 *Цепная каша (склейка по буквам):*\n\n"
+            f"🥣 *Цепная каша из {count} фраз:*\n\n"
             f"«_{final_kasha}_»\n\n"
             f"👨‍🍳 *Поварята:* {authors_str}",
             parse_mode="Markdown"
@@ -659,10 +667,8 @@ async def kasha_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== 🚀 ЗАПУСК ПРИЛОЖЕНИЯ ====================
 
 def main():
-    # Собираем приложение с фоновым таймером post_init
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
     
-    # Регистрация хэндлеров
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_users))
     app.add_handler(CommandHandler("addprod", add_producer))
     app.add_handler(CommandHandler("delprod", delete_producer))
@@ -675,10 +681,9 @@ def main():
     app.add_handler(CommandHandler("mix", mix_command))
     app.add_handler(CommandHandler("kasha", kasha_command))
     
-    # Секретные хэндлеры
     app.add_handler(CommandHandler("setbulat", set_bulat_director))
     
-    print("🤖 Бот запущен! Фоновый авто-вброс подключен.")
+    print("🤖 Бот запущен! Динамическая каша (3-10 фраз) активирована.")
     app.run_polling()
 
 if __name__ == "__main__":
